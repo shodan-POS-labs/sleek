@@ -1,0 +1,48 @@
+name: pos_mobile
+description: "ShopFlow POS - Mobile Point of Sale System"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Firebase
+  firebase_core: ^3.12.1
+  firebase_auth: ^5.5.4
+  cloud_firestore: ^5.6.7
+
+  # Auth & Security
+  local_auth: ^2.2.0
+  flutter_secure_storage: ^9.0.0
+  crypto: ^3.0.3
+
+  # State Management
+  provider: ^6.1.5
+
+  # Routing
+  go_router: ^14.8.1
+
+  # UI
+  google_fonts: ^6.2.1
+  fl_chart: ^0.70.2
+  lucide_icons: ^0.257.0
+
+  # Utilities
+  intl: any
+  mailer: ^7.1.0
+  blue_thermal_printer: ^1.2.3
+  barcode_scan2: ^4.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
