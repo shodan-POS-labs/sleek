@@ -84,6 +84,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return '${diff.inDays}d ago';
   }
 
+  // ── Seed Dummy Notifications (for testing) ──────────────────
+  Future<void> _seedDummyNotifications() async {
+    final now = DateTime.now();
+    final dummies = [
+      AppNotification(
+        type: 'daily_summary',
+        title: 'Daily Sales Summary',
+        body: 'Yesterday you made 12 sales totalling Rs. 8,450. Top seller: Paracetamol 500mg.',
+        createdAt: now.subtract(const Duration(hours: 2)),
+      ),
+      AppNotification(
+        type: 'low_stock',
+        title: 'Low Stock Alert',
+        body: 'Amoxicillin 250mg has only 3 units left — consider restocking.',
+        createdAt: now.subtract(const Duration(hours: 5)),
+        metadata: {'productName': 'Amoxicillin 250mg', 'stock': 3},
+      ),
+      AppNotification(
+        type: 'expiring_stock',
+        title: 'Medicine Expiring Soon',
+        body: 'Ibuprofen 400mg expires in 15 days (batch BN-0042).',
+        createdAt: now.subtract(const Duration(hours: 8)),
+        metadata: {'productName': 'Ibuprofen 400mg', 'daysUntilExpiry': 15},
+      ),
+      AppNotification(
+        type: 'expired_stock',
+        title: 'Expired Medicine Found',
+        body: 'Cetirizine 10mg (batch BN-0018) expired 5 days ago — remove from shelf.',
+        createdAt: now.subtract(const Duration(hours: 12)),
+        metadata: {'productName': 'Cetirizine 10mg'},
+      ),
+      AppNotification(
+        type: 'low_stock',
+        title: 'Low Stock Alert',
+        body: 'Aspirin 75mg has only 5 units remaining.',
+        createdAt: now.subtract(const Duration(days: 1)),
+        metadata: {'productName': 'Aspirin 75mg', 'stock': 5},
+      ),
+      AppNotification(
+        type: 'new_product_reminder',
+        title: 'New Stock Reminder',
+        body: 'Have you received new medicines this week? Tap here to add them.',
+        createdAt: now.subtract(const Duration(days: 1, hours: 6)),
+      ),
+      AppNotification(
+        type: 'daily_summary',
+        title: 'Daily Sales Summary',
+        body: 'You had 8 sales yesterday with total revenue Rs. 5,200.',
+        createdAt: now.subtract(const Duration(days: 2)),
+      ),
+    ];
+
+    for (final n in dummies) {
+      await _db.createNotification(_shopId, n);
+    }
+
+    final count = await _db.getUnreadNotificationCount(_shopId);
+    if (mounted) {
+      setState(() => _unreadNotifCount = count);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('7 test notifications created!'),
+          backgroundColor: AppTheme.primaryColor,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   // ── Notification Sheet ──────────────────────────────────────
   Future<void> _showNotificationsSheet(BuildContext context) async {
     List<AppNotification> notifications = [];
@@ -305,6 +374,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(14),
                     onTap: () => _showNotificationsSheet(context),
+                    onLongPress: _seedDummyNotifications,
                     child: Stack(
                       alignment: Alignment.center,
                       children: [

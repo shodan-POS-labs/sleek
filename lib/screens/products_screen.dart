@@ -66,6 +66,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
         initialCategory: existing?.category,
         initialModifiers: existing?.modifiers ?? [],
         initialVariants: existing?.variants ?? [],
+        initialExpiry: selectedExpiry,
+        onExpiryChanged: (d) => selectedExpiry = d,
         nameCtrl: nameCtrl,
         barcodeCtrl: barcodeCtrl,
         retailCtrl: retailCtrl,
@@ -302,6 +304,8 @@ class _AddProductSheet extends StatefulWidget {
   final String? initialCategory;
   final List<Map<String, dynamic>> initialModifiers;
   final List<Map<String, dynamic>> initialVariants;
+  final DateTime? initialExpiry;
+  final ValueChanged<DateTime?>? onExpiryChanged;
 
   const _AddProductSheet({
     required this.config,
@@ -309,6 +313,8 @@ class _AddProductSheet extends StatefulWidget {
     this.initialCategory,
     this.initialModifiers = const [],
     this.initialVariants = const [],
+    this.initialExpiry,
+    this.onExpiryChanged,
     required this.nameCtrl, required this.barcodeCtrl, required this.retailCtrl,
     required this.wholesaleCtrl, required this.stockCtrl,
     required this.batchCtrl, required this.serviceChargeCtrl, required this.deviceInfoCtrl,
@@ -321,6 +327,7 @@ class _AddProductSheet extends StatefulWidget {
 
 class _AddProductSheetState extends State<_AddProductSheet> {
   String? _selectedCategory;
+  DateTime? _selectedExpiry;
   final _categoryCtrl = TextEditingController();
   late final List<Map<String, dynamic>> _modifiers;
   late final List<Map<String, dynamic>> _variants;
@@ -333,6 +340,7 @@ class _AddProductSheetState extends State<_AddProductSheet> {
   void initState() {
     super.initState();
     // Seed from existing product data when editing
+    _selectedExpiry = widget.initialExpiry;
     _modifiers = List<Map<String, dynamic>>.from(widget.initialModifiers);
     _variants = List<Map<String, dynamic>>.from(widget.initialVariants);
     if (widget.initialCategory != null) {
@@ -451,17 +459,25 @@ class _AddProductSheetState extends State<_AddProductSheet> {
                 onPressed: () async {
                   final picked = await showDatePicker(
                     context: context,
-                    initialDate: DateTime.now().add(const Duration(days: 365)),
+                    initialDate: _selectedExpiry ?? DateTime.now().add(const Duration(days: 365)),
                     firstDate: DateTime.now(),
                     lastDate: DateTime.now().add(const Duration(days: 3650)),
                   );
-                  if (picked != null && mounted) setState(() {});
+                  if (picked != null && mounted) {
+                    setState(() => _selectedExpiry = picked);
+                    widget.onExpiryChanged?.call(picked);
+                  }
                 },
                 icon: const Icon(LucideIcons.calendar, size: 16),
-                label: const Text('Select Expiry Date'),
+                label: Text(
+                  _selectedExpiry != null
+                      ? 'Expires: ${_selectedExpiry!.day}/${_selectedExpiry!.month}/${_selectedExpiry!.year}'
+                      : 'Select Expiry Date',
+                ),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 48),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  foregroundColor: _selectedExpiry != null ? AppTheme.primaryColor : null,
                 ),
               ),
               const SizedBox(height: 16),

@@ -809,36 +809,66 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
     if (user == null) return;
     final shopId = user.shopId;
 
-    // Pre-load preferences + business config BEFORE opening the dialog
-    Map<String, dynamic> prefs;
-    BusinessConfig config;
-    try {
-      prefs = await _firestoreService.getNotificationPreferences(shopId);
-      config = await _firestoreService.getBusinessConfig(shopId);
-    } catch (_) {
-      prefs = {
-        'dailySalesSummary': true,
-        'lowStockAlerts': true,
-        'expiringMedicineAlert': true,
-        'expiredStockAlert': true,
-        'newProductReminder': true,
-        'pendingJobsReminder': true,
-        'overdueJobsAlert': true,
-        'restockReminder': true,
-        'dailyMenuReminder': true,
-      };
-      config = BusinessConfig.forType(BusinessType.retail);
-    }
-
-    if (!context.mounted) return;
-
+    // Show the dialog immediately — load data inside with a spinner
+    bool loadFired = false;
+    bool dataReady = false;
     bool isSaving = false;
+    Map<String, dynamic> prefs = {
+      'dailySalesSummary': true,
+      'lowStockAlerts': true,
+      'expiringMedicineAlert': true,
+      'expiredStockAlert': true,
+      'newProductReminder': true,
+      'pendingJobsReminder': true,
+      'overdueJobsAlert': true,
+      'restockReminder': true,
+      'dailyMenuReminder': true,
+    };
+    BusinessConfig config = BusinessConfig.forType(BusinessType.retail);
 
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateSB) {
+
+          // Kick off the async load once
+          if (!loadFired) {
+            loadFired = true;
+            Future.microtask(() async {
+              try {
+                final loadedPrefs = await _firestoreService.getNotificationPreferences(shopId);
+                final loadedConfig = await _firestoreService.getBusinessConfig(shopId);
+                if (ctx.mounted) {
+                  setStateSB(() {
+                    prefs = loadedPrefs;
+                    config = loadedConfig;
+                    dataReady = true;
+                  });
+                }
+              } catch (_) {
+                if (ctx.mounted) setStateSB(() => dataReady = true);
+              }
+            });
+          }
+
+          if (!dataReady) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text('Notifications', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              content: const SizedBox(
+                width: double.maxFinite,
+                height: 120,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              actions: [
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+                ),
+              ],
+            );
+          }
           // ── Helper to build a category header ──
           Widget sectionHeader(String title) => Padding(
                 padding: const EdgeInsets.only(top: 16, bottom: 4),
