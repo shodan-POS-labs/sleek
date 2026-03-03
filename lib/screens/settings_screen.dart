@@ -9,10 +9,10 @@ import '../services/firestore_service.dart';
 import '../models/app_user.dart';
 import '../models/business_config.dart';
 import '../utils/error_helpers.dart';
+import '../utils/database_seeder.dart';
 import 'package:blue_thermal_printer/blue_thermal_printer.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -63,6 +63,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'title': 'Cloud Backup & Sync',
           'items': [
             {'icon': LucideIcons.cloud, 'label': 'Cloud Sync is Active (Auto)', 'color': AppTheme.primaryColor, 'bg': AppTheme.primarySurface},
+          ],
+        },
+      if (isAdmin)
+        {
+          'title': 'Developer Tools',
+          'items': [
+            {'icon': LucideIcons.database, 'label': 'Seed Database (Test Data)', 'color': const Color(0xFFD97706), 'bg': const Color(0xFFFEF3C7), 'action': 'seed_database'},
           ],
         },
     ];
@@ -186,6 +193,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     _showHelpSupportDialog(context);
                                   } else if (item['action'] == 'notifications') {
                                     _showNotificationsDialog(context);
+                                  } else if (item['action'] == 'seed_database') {
+                                    _showSeedDatabaseDialog(context);
                                   }
                                 },
                                 borderRadius: BorderRadius.circular(0),
@@ -277,6 +286,108 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
       bottomNavigationBar: const BottomNav(currentIndex: 4),
+    );
+  }
+
+  Future<void> _showSeedDatabaseDialog(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(LucideIcons.alertTriangle, color: Color(0xFFD97706), size: 22),
+            const SizedBox(width: 8),
+            Text('Seed Database', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: Text(
+          'This will create 3 test shops (Pharmacy, Restaurant, Retail) with full dummy data including products, sales, customers, and notifications.\n\n'
+          'Accounts:\n'
+          '• somapalagalagedara@gmail.com → Pharmacy\n'
+          '• dingiribanda125@gmail.com → Restaurant\n'
+          '• pabasaraf79@gmail.com → Retail\n\n'
+          'Password: Test@1234  |  PIN: 123456\n\n'
+          'This may take a minute. Continue?',
+          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD97706),
+              foregroundColor: Colors.white,
+              minimumSize: const Size(0, 40),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Seed Now', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    // Show progress dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              const CircularProgressIndicator(color: AppTheme.primaryColor),
+              const SizedBox(height: 20),
+              Text('Seeding database...', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text('Creating shops, users, products, sales...',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary)),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    String result;
+    try {
+      result = await DatabaseSeeder.seed();
+    } catch (e) {
+      result = 'Error: $e';
+    }
+
+    if (!context.mounted) return;
+    Navigator.pop(context); // Dismiss progress dialog
+
+    // Show result
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Seed Result', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: SelectableText(result, style: GoogleFonts.firaCode(fontSize: 11, height: 1.5)),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(0, 40),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Done', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -612,7 +723,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _showPrinterSettingsDialog(BuildContext context) async {
-    bool isLoading = true;
     showDialog(
       context: context,
       barrierDismissible: false,

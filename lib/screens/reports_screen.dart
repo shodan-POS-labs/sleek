@@ -8,6 +8,7 @@ import '../core/theme/app_theme.dart';
 import '../widgets/bottom_nav.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import '../services/report_export_service.dart';
 import '../models/sale.dart';
 import '../models/product.dart';
 import '../models/business_config.dart';
@@ -22,6 +23,7 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   final _db = FirestoreService();
   final _auth = AuthService();
+  final _exportService = ReportExportService();
 
   String _period = 'daily'; // 'daily' or 'monthly'
   bool _loading = true;
@@ -270,7 +272,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Reports & Analytics', style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w500, color: Colors.white)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Reports & Analytics', style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w500, color: Colors.white)),
+                    Container(
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () => _showDownloadSheet(context),
+                        child: const Icon(LucideIcons.download, size: 22, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 // Period Selector
                 Row(
@@ -323,6 +342,194 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
       bottomNavigationBar: const BottomNav(currentIndex: 3),
     );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // DOWNLOAD SHEET — Choose month & format
+  // ═══════════════════════════════════════════════════════════
+
+  void _showDownloadSheet(BuildContext context) {
+    final now = DateTime.now();
+    int selectedYear = now.year;
+    int selectedMonth = now.month;
+    bool isExporting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateSB) {
+          final monthLabel = DateFormat('MMMM yyyy').format(DateTime(selectedYear, selectedMonth));
+
+          return Container(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Handle bar
+                  Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(color: AppTheme.borderMedium, borderRadius: BorderRadius.circular(2)),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Title
+                  Row(
+                    children: [
+                      const Icon(LucideIcons.download, size: 22, color: AppTheme.primaryColor),
+                      const SizedBox(width: 10),
+                      Text('Download Sales Report', style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Month selector
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.background,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.borderLight),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(
+                          icon: const Icon(LucideIcons.chevronLeft, size: 20),
+                          onPressed: () {
+                            setStateSB(() {
+                              if (selectedMonth == 1) {
+                                selectedMonth = 12;
+                                selectedYear--;
+                              } else {
+                                selectedMonth--;
+                              }
+                            });
+                          },
+                        ),
+                        Text(monthLabel, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500)),
+                        IconButton(
+                          icon: const Icon(LucideIcons.chevronRight, size: 20),
+                          onPressed: (selectedYear == now.year && selectedMonth >= now.month)
+                              ? null
+                              : () {
+                                  setStateSB(() {
+                                    if (selectedMonth == 12) {
+                                      selectedMonth = 1;
+                                      selectedYear++;
+                                    } else {
+                                      selectedMonth++;
+                                    }
+                                  });
+                                },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Export buttons
+                  if (isExporting)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Column(
+                        children: [
+                          CircularProgressIndicator(color: AppTheme.primaryColor),
+                          SizedBox(height: 12),
+                          Text('Generating report...'),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    // PDF button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _doExport(ctx, setStateSB, selectedYear, selectedMonth, 'pdf', () => isExporting = true, () => isExporting = false),
+                        icon: const Icon(LucideIcons.fileText, size: 20),
+                        label: Text('Download as PDF', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(0, 52),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Excel button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _doExport(ctx, setStateSB, selectedYear, selectedMonth, 'excel', () => isExporting = true, () => isExporting = false),
+                        icon: const Icon(LucideIcons.table, size: 20, color: Color(0xFF217346)),
+                        label: Text('Download as Excel', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500, color: const Color(0xFF217346))),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFF217346)),
+                          minimumSize: const Size(0, 52),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _doExport(
+    BuildContext ctx,
+    void Function(void Function()) setStateSB,
+    int year,
+    int month,
+    String format,
+    VoidCallback setLoading,
+    VoidCallback clearLoading,
+  ) async {
+    setStateSB(setLoading);
+    try {
+      if (format == 'pdf') {
+        await _exportService.exportMonthlySalesPdf(shopId: _shopId, year: year, month: month);
+      } else {
+        await _exportService.exportMonthlySalesExcel(shopId: _shopId, year: year, month: month);
+      }
+      if (ctx.mounted) {
+        Navigator.pop(ctx);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${format.toUpperCase()} report downloaded!'),
+            backgroundColor: AppTheme.primaryColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      setStateSB(clearLoading);
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
