@@ -245,7 +245,7 @@ class AuthService {
       if (!canCheck || !isSupported) return null;
 
       final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Unlock ShopFlow (${user.name})',
+        localizedReason: 'Unlock Sleek (${user.name})',
         options: const AuthenticationOptions(biometricOnly: true),
       );
 
@@ -280,7 +280,7 @@ class AuthService {
       }
 
       final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Authenticate to enable biometric login for ShopFlow',
+        localizedReason: 'Authenticate to enable biometric login for Sleek',
         options: const AuthenticationOptions(biometricOnly: true),
       );
 
@@ -344,5 +344,50 @@ class AuthService {
     await _storage.delete(key: 'session_uid');
     // We intentionally keep 'last_uid' and '${uid}_last_email_login' so they can use PIN later if session is active
     _currentUser = null;
+  }
+
+  // ── Password / PIN Reset ──────────────────────────────────────────────────
+
+  /// Send Firebase Auth password reset email (admin self-service)
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _firebaseAuth.sendPasswordResetEmail(email: email.trim());
+  }
+
+  /// Admin resets a cashier's PIN directly (no old PIN needed)
+  Future<void> adminResetCashierPin({
+    required String cashierUid,
+    required String newPin,
+  }) async {
+    if (_currentUser == null || _currentUser!.role != UserRole.admin) {
+      throw Exception('Only admins can reset cashier PINs.');
+    }
+    final hashed = _hashPin(newPin);
+    await _firestore.collection('users').doc(cashierUid).update({
+      'pinHash': hashed,
+    });
+  }
+
+  /// Get all users (cashiers + admins) for the current shop
+  Future<List<AppUser>> getShopUsers() async {
+    if (_currentUser == null) return [];
+    final snapshot = await _firestore
+        .collection('users')
+        .where('shopId', isEqualTo: _currentUser!.shopId)
+        .get();
+    return snapshot.docs
+        .map((doc) => AppUser.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
+  /// Find the admin user for a given shop (for cashier reset-request notifications)
+  Future<AppUser?> getShopAdmin(String shopId) async {
+    final snapshot = await _firestore
+        .collection('users')
+        .where('shopId', isEqualTo: shopId)
+        .where('role', isEqualTo: 'admin')
+        .limit(1)
+        .get();
+    if (snapshot.docs.isEmpty) return null;
+    return AppUser.fromMap(snapshot.docs.first.data(), snapshot.docs.first.id);
   }
 }

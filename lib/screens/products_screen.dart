@@ -364,16 +364,32 @@ class _AddProductSheetState extends State<_AddProductSheet> {
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
       decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: MediaQuery.of(context).viewInsets.bottom + 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.borderMedium, borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: 16),
-            Text(widget.isEditing ? 'Edit ${c.salesItemLabel}' : c.addItemLabel, style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Drag handle (outside scroll so it triggers dismiss) ──
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onVerticalDragUpdate: (details) {
+              if (details.primaryDelta != null && details.primaryDelta! > 10) {
+                Navigator.of(context).pop();
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(top: 16, bottom: 8),
+              child: Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.borderMedium, borderRadius: BorderRadius.circular(2)))),
+            ),
+          ),
+          // ── Scrollable form content ──
+          Flexible(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(left: 24, right: 24, top: 8, bottom: MediaQuery.of(context).viewInsets.bottom + 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(widget.isEditing ? 'Edit ${c.salesItemLabel}' : c.addItemLabel, style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 20),
 
             // ── Name (always) ──
             _label('${c.salesItemLabel} Name'),
@@ -605,6 +621,9 @@ class _AddProductSheetState extends State<_AddProductSheet> {
             ),
           ],
         ),
+      ),
+          ),
+        ],
       ),
     );
   }

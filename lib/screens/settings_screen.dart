@@ -9,7 +9,6 @@ import '../services/firestore_service.dart';
 import '../models/app_user.dart';
 import '../models/business_config.dart';
 import '../utils/error_helpers.dart';
-import '../utils/database_seeder.dart';
 import 'package:blue_thermal_printer/blue_thermal_printer.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
@@ -56,6 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'title': 'Management',
           'items': [
             {'icon': LucideIcons.users, 'label': 'Add Cashier', 'color': AppTheme.warning, 'bg': const Color(0xFFFFF7ED), 'action': 'add_cashier'},
+            {'icon': LucideIcons.shieldAlert, 'label': 'Manage Cashiers', 'color': AppTheme.info, 'bg': const Color(0xFFEFF6FF), 'action': 'manage_cashiers'},
           ],
         },
       if (isAdmin)
@@ -63,13 +63,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'title': 'Cloud Backup & Sync',
           'items': [
             {'icon': LucideIcons.cloud, 'label': 'Cloud Sync is Active (Auto)', 'color': AppTheme.primaryColor, 'bg': AppTheme.primarySurface},
-          ],
-        },
-      if (isAdmin)
-        {
-          'title': 'Developer Tools',
-          'items': [
-            {'icon': LucideIcons.database, 'label': 'Seed Database (Test Data)', 'color': const Color(0xFFD97706), 'bg': const Color(0xFFFEF3C7), 'action': 'seed_database'},
           ],
         },
     ];
@@ -193,8 +186,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     _showHelpSupportDialog(context);
                                   } else if (item['action'] == 'notifications') {
                                     _showNotificationsDialog(context);
-                                  } else if (item['action'] == 'seed_database') {
-                                    _showSeedDatabaseDialog(context);
+                                  } else if (item['action'] == 'manage_cashiers') {
+                                    _showManageCashiersDialog(context);
                                   }
                                 },
                                 borderRadius: BorderRadius.circular(0),
@@ -251,11 +244,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: const Icon(LucideIcons.store, size: 32, color: AppTheme.primaryColor),
                         ),
                         const SizedBox(height: 12),
-                        Text('ShopFlow POS', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500)),
+                        Text('Sleek POS', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500)),
                         const SizedBox(height: 4),
                         Text('Version 1.0.0', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary)),
                         const SizedBox(height: 8),
-                        Text('Â© 2026 ShopFlow. All rights reserved.', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary)),
+                        Text('\u00a9 2026 Sleek. All rights reserved.', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary)),
                       ],
                     ),
                   ),
@@ -286,108 +279,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
       bottomNavigationBar: const BottomNav(currentIndex: 4),
-    );
-  }
-
-  Future<void> _showSeedDatabaseDialog(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(LucideIcons.alertTriangle, color: Color(0xFFD97706), size: 22),
-            const SizedBox(width: 8),
-            Text('Seed Database', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18)),
-          ],
-        ),
-        content: Text(
-          'This will create 3 test shops (Pharmacy, Restaurant, Retail) with full dummy data including products, sales, customers, and notifications.\n\n'
-          'Accounts:\n'
-          '• somapalagalagedara@gmail.com → Pharmacy\n'
-          '• dingiribanda125@gmail.com → Restaurant\n'
-          '• pabasaraf79@gmail.com → Retail\n\n'
-          'Password: Test@1234  |  PIN: 123456\n\n'
-          'This may take a minute. Continue?',
-          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFD97706),
-              foregroundColor: Colors.white,
-              minimumSize: const Size(0, 40),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: Text('Seed Now', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return;
-
-    // Show progress dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              const CircularProgressIndicator(color: AppTheme.primaryColor),
-              const SizedBox(height: 20),
-              Text('Seeding database...', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Text('Creating shops, users, products, sales...',
-                  style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary)),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    String result;
-    try {
-      result = await DatabaseSeeder.seed();
-    } catch (e) {
-      result = 'Error: $e';
-    }
-
-    if (!context.mounted) return;
-    Navigator.pop(context); // Dismiss progress dialog
-
-    // Show result
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Seed Result', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(
-          child: SelectableText(result, style: GoogleFonts.firaCode(fontSize: 11, height: 1.5)),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(0, 40),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: Text('Done', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
     );
   }
 
@@ -799,7 +690,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               ElevatedButton(
                 onPressed: (!isConnected || selectedDevice == null) ? null : () async {
-                  await bluetooth.printCustom("ShopFlow POS", 3, 1);
+                  await bluetooth.printCustom("Sleek POS", 3, 1);
                   await bluetooth.printNewLine();
                   await bluetooth.printCustom("Test Print Successful!", 1, 1);
                   await bluetooth.printNewLine();
@@ -823,7 +714,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: Text('Privacy Policy', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
         content: SingleChildScrollView(
           child: Text(
-            'We value your privacy. All ShopFlow POS data is stored securely in Firebase, '
+            'We value your privacy. All Sleek POS data is stored securely in Firebase, '
             'with role-based access controls to protect sensitive business information. '
             'We do not sell your data to third parties. By using this application, you '
             'agree to our standard formality terms and conditions regarding data handling '
@@ -884,9 +775,9 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
                     
                     final smtpServer = gmail(username, password);
                     final message = Message()
-                      ..from = Address(username, 'ShopFlow POS App')
+                      ..from = Address(username, 'Sleek POS App')
                       ..recipients.add('somapalagalagedara@gmail.com')
-                      ..subject = 'Support Request: ShopFlow POS'
+                      ..subject = 'Support Request: Sleek POS'
                       ..text = 'Support Request from ${_auth.currentUser?.name} (Shop ID: ${_auth.currentUser?.shopId})\n\nMessage:\n${messageCtrl.text.trim()}';
 
                     await send(message, smtpServer);
@@ -1196,6 +1087,172 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
       ),
     );
   }
+
+  // ── Manage Cashiers (Admin resets cashier PIN) ─────────────────────────────
+
+  Future<void> _showManageCashiersDialog(BuildContext context) async {
+    final user = _auth.currentUser;
+    if (user == null || user.role != UserRole.admin) return;
+
+    bool loading = true;
+    List<AppUser> cashiers = [];
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateSB) {
+          // Load cashiers on first build
+          if (loading) {
+            _firestoreService.getShopUsers(user.shopId).then((users) {
+              if (ctx.mounted) {
+                setStateSB(() {
+                  cashiers = users.where((u) => u.role == UserRole.cashier).toList();
+                  loading = false;
+                });
+              }
+            });
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: [
+                const Icon(LucideIcons.users, color: AppTheme.info),
+                const SizedBox(width: 8),
+                Text('Manage Cashiers', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18)),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: loading
+                  ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
+                  : cashiers.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(LucideIcons.userX, size: 48, color: AppTheme.textTertiary),
+                              const SizedBox(height: 12),
+                              Text('No cashiers found', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+                            ],
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: cashiers.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (_, i) {
+                            final c = cashiers[i];
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                              leading: Container(
+                                width: 44, height: 44,
+                                decoration: BoxDecoration(color: AppTheme.info.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                                child: const Icon(LucideIcons.userCircle, color: AppTheme.info),
+                              ),
+                              title: Text(c.name, style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
+                              subtitle: Text(c.email ?? '', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary)),
+                              trailing: TextButton.icon(
+                                icon: const Icon(LucideIcons.keyRound, size: 16),
+                                label: const Text('Reset PIN'),
+                                style: TextButton.styleFrom(foregroundColor: AppTheme.warning),
+                                onPressed: () => _showResetCashierPinDialog(ctx, c, setStateSB),
+                              ),
+                            );
+                          },
+                        ),
+            ),
+            actions: [
+              OutlinedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Close', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showResetCashierPinDialog(BuildContext parentCtx, AppUser cashier, void Function(void Function()) parentSetState) {
+    final pinCtrl = TextEditingController();
+    bool resetting = false;
+
+    showDialog(
+      context: parentCtx,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateSB) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text('Reset PIN for ${cashier.name}', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Set a new 6-digit PIN for this cashier. No previous PIN is required.',
+                  style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: pinCtrl,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'New 6-Digit PIN',
+                    prefixIcon: const Icon(LucideIcons.key, color: AppTheme.warning),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    counterText: '',
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              OutlinedButton(
+                onPressed: resetting ? null : () => Navigator.pop(ctx),
+                child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+              ),
+              ElevatedButton(
+                onPressed: resetting
+                    ? null
+                    : () async {
+                        if (pinCtrl.text.length != 6) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('PIN must be exactly 6 digits'), backgroundColor: AppTheme.error),
+                          );
+                          return;
+                        }
+                        setStateSB(() => resetting = true);
+                        try {
+                          await _auth.adminResetCashierPin(cashierUid: cashier.uid, newPin: pinCtrl.text);
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('PIN reset for ${cashier.name}!'), backgroundColor: Colors.green),
+                            );
+                          }
+                        } catch (e) {
+                          setStateSB(() => resetting = false);
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error),
+                            );
+                          }
+                        }
+                      },
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warning, foregroundColor: Colors.white, minimumSize: const Size(0, 48)),
+                child: resetting
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('Reset PIN'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _AdminCategoriesSection extends StatefulWidget {
@@ -1291,10 +1348,8 @@ class _AdminCategoriesSectionState extends State<_AdminCategoriesSection> {
   }
 }
 
-
-
-
-
+// Inline extension – kept at end of file
+// No extra file needed
 
 
 

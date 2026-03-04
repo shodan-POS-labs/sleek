@@ -68,7 +68,7 @@ class _ShopSetupScreenState extends State<ShopSetupScreen> {
                   Icon(LucideIcons.store, size: 64, color: AppTheme.primaryColor),
                   const SizedBox(height: 24),
                   Text(
-                    'Welcome to ShopFlow',
+                    'Welcome to Sleek',
                     style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                     textAlign: TextAlign.center,
                   ),
@@ -153,6 +153,50 @@ class _ShopSetupScreenState extends State<ShopSetupScreen> {
                           ? const CircularProgressIndicator(color: Colors.white)
                           : Text('Create Shop & Account', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600)),
                     ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Already have an account?',
+                        style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => context.go('/login?mode=email'),
+                          icon: const Icon(LucideIcons.mail, size: 18),
+                          label: Text('Email Login', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.primaryColor,
+                            side: const BorderSide(color: AppTheme.primaryColor),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            minimumSize: const Size(0, 44),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => context.go('/login'),
+                          icon: const Icon(LucideIcons.keyRound, size: 18),
+                          label: Text('PIN Login', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.primaryColor,
+                            side: const BorderSide(color: AppTheme.primaryColor),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            minimumSize: const Size(0, 44),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

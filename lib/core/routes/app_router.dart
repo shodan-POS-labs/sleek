@@ -8,6 +8,7 @@ import '../../screens/customers_screen.dart';
 import '../../screens/reports_screen.dart';
 import '../../screens/settings_screen.dart';
 import '../../screens/register_screen.dart';
+import '../../screens/saved_reports_screen.dart';
 
 class AppRouter {
   static GoRouter getRouter(String initialRoute) {
@@ -24,7 +25,10 @@ class AppRouter {
         ),
         GoRoute(
           path: '/login',
-        builder: (context, state) => const LoginScreen(),
+        builder: (context, state) {
+          final email = state.uri.queryParameters['mode'] == 'email';
+          return LoginScreen(startWithEmail: email);
+        },
       ),
       GoRoute(
         path: '/dashboard',
@@ -49,6 +53,10 @@ class AppRouter {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/saved-reports',
+        builder: (context, state) => const SavedReportsScreen(),
       ),
       ],
     );

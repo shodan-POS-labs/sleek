@@ -1,6 +1,6 @@
 {
-    "name": "pos_mobile",
-    "short_name": "pos_mobile",
+    "name": "Sleek POS",
+    "short_name": "Sleek",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

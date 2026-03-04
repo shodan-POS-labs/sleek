@@ -4,6 +4,7 @@ import '../models/customer.dart';
 import '../models/sale.dart';
 import '../models/business_config.dart';
 import '../models/app_notification.dart';
+import '../models/app_user.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -269,10 +270,18 @@ class FirestoreService {
   // ---------------------------------------------------------------------------
 
   /// Fetch all sales within a date range (inclusive).
+  /// Handles both local ISO strings ("2026-03-01T00:00:00.000") and
+  /// UTC ISO strings with Z suffix ("2026-03-01T00:00:00.000Z").
   Future<List<Sale>> getSalesInRange(String shopId, DateTime start, DateTime end) async {
+    // Use a range that covers both local and UTC formatted ISO strings.
+    // Local: "2026-03-01T00:00:00.000"  UTC: "2026-03-01T00:00:00.000Z"
+    // Appending 'Z' to end ensures UTC-formatted dates are included.
+    final startStr = start.toIso8601String();
+    final endStr = '${end.toIso8601String()}Z';
+
     final snapshot = await _sales(shopId)
-        .where('createdAt', isGreaterThanOrEqualTo: start.toIso8601String())
-        .where('createdAt', isLessThanOrEqualTo: end.toIso8601String())
+        .where('createdAt', isGreaterThanOrEqualTo: startStr)
+        .where('createdAt', isLessThanOrEqualTo: endStr)
         .orderBy('createdAt', descending: true)
         .get();
 
@@ -411,5 +420,31 @@ class FirestoreService {
       batch.update(doc.reference, {'isRead': true});
     }
     await batch.commit();
+  }
+
+  // ---------------------------------------------------------------------------
+  // USERS
+  // ---------------------------------------------------------------------------
+
+  /// Find a user by email address (for cashier PIN reset requests from login)
+  Future<AppUser?> queryUserByEmail(String email) async {
+    final snapshot = await _db
+        .collection('users')
+        .where('email', isEqualTo: email.trim())
+        .limit(1)
+        .get();
+    if (snapshot.docs.isEmpty) return null;
+    return AppUser.fromMap(snapshot.docs.first.data(), snapshot.docs.first.id);
+  }
+
+  /// Get all users in a shop
+  Future<List<AppUser>> getShopUsers(String shopId) async {
+    final snapshot = await _db
+        .collection('users')
+        .where('shopId', isEqualTo: shopId)
+        .get();
+    return snapshot.docs
+        .map((doc) => AppUser.fromMap(doc.data(), doc.id))
+        .toList();
   }
 }

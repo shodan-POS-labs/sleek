@@ -25,17 +25,17 @@ void main() async {
   final hasShop = await firestoreService.hasShop();
   final initialRoute = hasShop ? '/login' : '/shop-setup';
 
-  runApp(ShopFlowApp(initialRoute: initialRoute));
+  runApp(SleekApp(initialRoute: initialRoute));
 }
 
-class ShopFlowApp extends StatelessWidget {
+class SleekApp extends StatelessWidget {
   final String initialRoute;
-  const ShopFlowApp({super.key, required this.initialRoute});
+  const SleekApp({super.key, required this.initialRoute});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'ShopFlow POS',
+      title: 'Sleek POS',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: AppRouter.getRouter(initialRoute),

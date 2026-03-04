@@ -1,5 +1,7 @@
 // ignore_for_file: use_build_context_synchronously
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -448,40 +450,99 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                     )
                   else ...[
-                    // PDF button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _doExport(ctx, setStateSB, selectedYear, selectedMonth, 'pdf', () => isExporting = true, () => isExporting = false),
-                        icon: const Icon(LucideIcons.fileText, size: 20),
-                        label: Text('Download as PDF', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(0, 52),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    // PDF row
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 52,
+                            child: ElevatedButton.icon(
+                              onPressed: () => _doExport(ctx, setStateSB, selectedYear, selectedMonth, 'pdf', false, () => isExporting = true, () => isExporting = false),
+                              icon: const Icon(LucideIcons.fileText, size: 20),
+                              label: Text('PDF', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryColor,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(0, 52),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          height: 52,
+                          width: 52,
+                          child: OutlinedButton(
+                            onPressed: () => _doExport(ctx, setStateSB, selectedYear, selectedMonth, 'pdf', true, () => isExporting = true, () => isExporting = false),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: AppTheme.primaryColor),
+                              minimumSize: const Size(0, 52),
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            child: const Icon(LucideIcons.share2, size: 20, color: AppTheme.primaryColor),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
 
-                    // Excel button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _doExport(ctx, setStateSB, selectedYear, selectedMonth, 'excel', () => isExporting = true, () => isExporting = false),
-                        icon: const Icon(LucideIcons.table, size: 20, color: Color(0xFF217346)),
-                        label: Text('Download as Excel', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500, color: const Color(0xFF217346))),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0xFF217346)),
-                          minimumSize: const Size(0, 52),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    // Excel row
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 52,
+                            child: OutlinedButton.icon(
+                              onPressed: () => _doExport(ctx, setStateSB, selectedYear, selectedMonth, 'excel', false, () => isExporting = true, () => isExporting = false),
+                              icon: const Icon(LucideIcons.table, size: 20, color: Color(0xFF217346)),
+                              label: Text('Excel', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500, color: const Color(0xFF217346))),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Color(0xFF217346)),
+                                minimumSize: const Size(0, 52),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          height: 52,
+                          width: 52,
+                          child: OutlinedButton(
+                            onPressed: () => _doExport(ctx, setStateSB, selectedYear, selectedMonth, 'excel', true, () => isExporting = true, () => isExporting = false),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF217346)),
+                              minimumSize: const Size(0, 52),
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            child: const Icon(LucideIcons.share2, size: 20, color: Color(0xFF217346)),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
+
+                  // ── View Saved Reports link ──
+                  const SizedBox(height: 16),
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        GoRouter.of(context).push('/saved-reports');
+                      },
+                      icon: const Icon(LucideIcons.folderOpen, size: 18),
+                      label: Text('View Saved Reports',
+                          style: GoogleFonts.inter(
+                              fontSize: 14, fontWeight: FontWeight.w500)),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.textSecondary,
+                        minimumSize: const Size(0, 40),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -497,21 +558,28 @@ class _ReportsScreenState extends State<ReportsScreen> {
     int year,
     int month,
     String format,
+    bool share,
     VoidCallback setLoading,
     VoidCallback clearLoading,
   ) async {
     setStateSB(setLoading);
     try {
+      File file;
       if (format == 'pdf') {
-        await _exportService.exportMonthlySalesPdf(shopId: _shopId, year: year, month: month);
+        file = await _exportService.exportMonthlySalesPdf(shopId: _shopId, year: year, month: month);
       } else {
-        await _exportService.exportMonthlySalesExcel(shopId: _shopId, year: year, month: month);
+        file = await _exportService.exportMonthlySalesExcel(shopId: _shopId, year: year, month: month);
+      }
+      if (share) {
+        await _exportService.shareFile(file);
       }
       if (ctx.mounted) {
         Navigator.pop(ctx);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${format.toUpperCase()} report downloaded!'),
+            content: Text(share
+                ? '${format.toUpperCase()} report ready to share!'
+                : '${format.toUpperCase()} report saved!'),
             backgroundColor: AppTheme.primaryColor,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

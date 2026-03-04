@@ -78,11 +78,13 @@ class _SalesScreenState extends State<SalesScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateSB) {
           return Container(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
             decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -93,47 +95,58 @@ class _SalesScreenState extends State<SalesScreen> {
                 const SizedBox(height: 4),
                 Text('Rs. ${NumberFormat('#,###').format(product.retailPrice.toInt())}', style: GoogleFonts.inter(fontSize: 16, color: AppTheme.primaryColor, fontWeight: FontWeight.w500)),
 
-                // Variants (e.g. Small / Medium / Large)
-                if (product.variants.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text('Size / Variant', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: product.variants.map((v) {
-                      final label = v['label'] as String? ?? '';
-                      final price = (v['price'] as num?)?.toDouble() ?? 0;
-                      final isChosen = chosenVariant == label;
-                      return ChoiceChip(
-                        label: Text('$label (+Rs.${price.toInt()})'),
-                        selected: isChosen,
-                        onSelected: (_) => setStateSB(() { chosenVariant = label; variantPrice = price; }),
-                        selectedColor: AppTheme.primaryColor.withOpacity(0.15),
-                      );
-                    }).toList(),
-                  ),
-                ],
+                // Scrollable middle section for variants & modifiers
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Variants (e.g. Small / Medium / Large)
+                        if (product.variants.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          Text('Size / Variant', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            children: product.variants.map((v) {
+                              final label = v['label'] as String? ?? '';
+                              final price = (v['price'] as num?)?.toDouble() ?? 0;
+                              final isChosen = chosenVariant == label;
+                              return ChoiceChip(
+                                label: Text('$label (+Rs.${price.toInt()})'),
+                                selected: isChosen,
+                                onSelected: (_) => setStateSB(() { chosenVariant = label; variantPrice = price; }),
+                                selectedColor: AppTheme.primaryColor.withOpacity(0.15),
+                              );
+                            }).toList(),
+                          ),
+                        ],
 
-                // Modifiers (e.g. Extra Cheese, Extra Sauce)
-                if (product.modifiers.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text('Add-ons / Extras', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
-                  const SizedBox(height: 8),
-                  ...product.modifiers.map((m) {
-                    final name = m['name'] as String? ?? '';
-                    final price = (m['price'] as num?)?.toDouble() ?? 0;
-                    final isOn = selected.any((s) => s['name'] == name);
-                    return CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('$name (+Rs.${price.toInt()})', style: GoogleFonts.inter(fontSize: 14)),
-                      value: isOn,
-                      activeColor: AppTheme.primaryColor,
-                      onChanged: (val) => setStateSB(() {
-                        if (val == true) { selected.add(m); } else { selected.removeWhere((s) => s['name'] == name); }
-                      }),
-                    );
-                  }),
-                ],
+                        // Modifiers (e.g. Extra Cheese, Extra Sauce)
+                        if (product.modifiers.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          Text('Add-ons / Extras', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                          const SizedBox(height: 8),
+                          ...product.modifiers.map((m) {
+                            final name = m['name'] as String? ?? '';
+                            final price = (m['price'] as num?)?.toDouble() ?? 0;
+                            final isOn = selected.any((s) => s['name'] == name);
+                            return CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text('$name (+Rs.${price.toInt()})', style: GoogleFonts.inter(fontSize: 14)),
+                              value: isOn,
+                              activeColor: AppTheme.primaryColor,
+                              onChanged: (val) => setStateSB(() {
+                                if (val == true) { selected.add(m); } else { selected.removeWhere((s) => s['name'] == name); }
+                              }),
+                            );
+                          }),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
 
                 const SizedBox(height: 20),
                 SizedBox(
@@ -384,22 +397,32 @@ class _SalesScreenState extends State<SalesScreen> {
                 constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  border: Border(top: BorderSide(color: AppTheme.borderMedium)),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, -5))],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // ── Drag handle to dismiss cart ──
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _showCart = false),
+                      onVerticalDragUpdate: (details) {
+                        if (details.primaryDelta != null && details.primaryDelta! > 10) {
+                          setState(() => _showCart = false);
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 12, bottom: 4),
+                        child: Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.borderMedium, borderRadius: BorderRadius.circular(2)))),
+                      ),
+                    ),
                     Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text('Cart ($totalItems items)', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500)),
-                          GestureDetector(
-                            onTap: () => setState(() => _showCart = false),
-                            child: Text('Hide', style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 14)),
-                          ),
                         ],
                       ),
                     ),

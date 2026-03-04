@@ -1,4 +1,4 @@
-# ShopFlow POS — Testing Workflow
+# Sleek POS — Testing Workflow
 
 > **Seeded Accounts**
 >
@@ -14,13 +14,18 @@
 
 ## 0. Prerequisites — Seed the Database
 
-1. Open the app and register **any** temporary account (this is just to access Settings).
-2. Go to **Settings → Developer Tools → Seed Database (Test Data)**.
-3. Tap **Seed Now** and wait for completion (~1 min).
-4. You'll see a log confirming all 3 shops were created.
-5. **Log out** and proceed to testing with the seeded accounts.
+1. Place your Firebase service account key as `seeder/serviceAccountKey.json`
+   (Firebase Console → Project Settings → Service accounts → Generate new private key).
+2. In a terminal:
+   ```bash
+   cd seeder
+   npm install
+   npm run seed
+   ```
+3. Wait for completion (~1–2 min). You'll see a log confirming all 3 shops were created.
+4. Open the app and proceed to testing with the seeded accounts.
 
-> **Tip:** If the seed fails with "email-already-in-use", it will reuse the existing Firebase Auth user automatically.
+> **Tip:** If any Firebase Auth user already exists, the seeder reuses it automatically.
 
 ---
 

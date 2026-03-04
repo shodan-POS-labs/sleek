@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:open_file/open_file.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:excel/excel.dart';
@@ -16,7 +16,7 @@ class ReportExportService {
 
   // ── Public entry points ────────────────────────────────────
 
-  /// Generate and open a **PDF** monthly sales report.
+  /// Generate a **PDF** monthly sales report and return the file.
   Future<File> exportMonthlySalesPdf({
     required String shopId,
     required int year,
@@ -26,11 +26,10 @@ class ReportExportService {
     final pdfDoc = await _buildPdf(data);
     final bytes = await pdfDoc.save();
     final file = await _writeFile(bytes, 'Sales_Report_${data.monthLabel}.pdf');
-    await OpenFile.open(file.path);
     return file;
   }
 
-  /// Generate and open an **Excel** monthly sales report.
+  /// Generate an **Excel** monthly sales report and return the file.
   Future<File> exportMonthlySalesExcel({
     required String shopId,
     required int year,
@@ -39,8 +38,16 @@ class ReportExportService {
     final data = await _gatherMonthlyData(shopId, year, month);
     final bytes = _buildExcel(data);
     final file = await _writeFile(bytes, 'Sales_Report_${data.monthLabel}.xlsx');
-    await OpenFile.open(file.path);
     return file;
+  }
+
+  /// Share a generated report file using the system share sheet.
+  Future<void> shareFile(File file) async {
+    final xFile = XFile(file.path);
+    await Share.shareXFiles(
+      [xFile],
+      subject: 'Sleek POS — Sales Report',
+    );
   }
 
   // ── Data gathering ─────────────────────────────────────────
@@ -48,7 +55,7 @@ class ReportExportService {
   Future<_MonthlyReportData> _gatherMonthlyData(
       String shopId, int year, int month) async {
     final start = DateTime(year, month, 1);
-    final end = DateTime(year, month + 1, 0, 23, 59, 59); // last day
+    final end = DateTime(year, month + 1, 0, 23, 59, 59, 999); // last ms of last day
 
     final config = await _db.getBusinessConfig(shopId);
     final shopDetails = await _db.getShopDetails(shopId);
@@ -359,34 +366,70 @@ class ReportExportService {
   List<int> _buildExcel(_MonthlyReportData d) {
     final excel = Excel.createExcel();
     final netProfit = d.totalRevenue - d.totalCost - d.totalDiscount;
-    final avgOrderValue = d.totalOrders > 0 ? d.totalRevenue / d.totalOrders : 0.0;
+    final avgOrderValue =
+        d.totalOrders > 0 ? d.totalRevenue / d.totalOrders : 0.0;
+
+    final boldStyle = CellStyle(bold: true, fontSize: 12);
+    final headerStyle = CellStyle(
+      bold: true,
+      fontSize: 11,
+      backgroundColorHex: ExcelColor.fromHexString('#059669'),
+      fontColorHex: ExcelColor.white,
+    );
 
     // ── Sheet 1: Summary ──
     final summary = excel['Summary'];
-    _excelTitle(summary, 0, '${d.shopName} — Monthly Sales Report');
-    _excelTitle(summary, 1, d.monthDisplay);
+    summary.appendRow([TextCellValue('${d.shopName} — Monthly Sales Report')]);
+    summary.appendRow([TextCellValue(d.monthDisplay)]);
     summary.appendRow([TextCellValue('')]);
+    summary.appendRow([TextCellValue('Metric'), TextCellValue('Value')]);
 
-    final summaryRows = [
-      ['Total Revenue', _fmt(d.totalRevenue)],
-      ['Total Orders', '${d.totalOrders}'],
-      ['Avg. Order Value', _fmt(avgOrderValue)],
-      ['Total Discounts', _fmt(d.totalDiscount)],
-    ];
+    // Apply title styles to rows 0 and 1
+    _styleCell(summary, 0, 0, CellStyle(bold: true, fontSize: 14));
+    _styleCell(summary, 1, 0, CellStyle(bold: true, fontSize: 12));
+    // Apply header style to row 3
+    _styleCell(summary, 3, 0, headerStyle);
+    _styleCell(summary, 3, 1, headerStyle);
+
+    summary.appendRow(
+        [TextCellValue('Total Revenue'), TextCellValue(_fmt(d.totalRevenue))]);
+    summary.appendRow(
+        [TextCellValue('Total Orders'), TextCellValue('${d.totalOrders}')]);
+    summary.appendRow([
+      TextCellValue('Avg. Order Value'),
+      TextCellValue(_fmt(avgOrderValue))
+    ]);
+    summary.appendRow([
+      TextCellValue('Total Discounts'),
+      TextCellValue(_fmt(d.totalDiscount))
+    ]);
     if (d.config.hasWholesalePrice) {
-      summaryRows.add(['Cost of Goods', _fmt(d.totalCost)]);
-      summaryRows.add(['Net Profit', _fmt(netProfit)]);
-    }
-    for (final row in summaryRows) {
-      summary.appendRow([TextCellValue(row[0]), TextCellValue(row[1])]);
+      summary.appendRow([
+        TextCellValue('Cost of Goods'),
+        TextCellValue(_fmt(d.totalCost))
+      ]);
+      summary.appendRow(
+          [TextCellValue('Net Profit'), TextCellValue(_fmt(netProfit))]);
     }
 
     // Payment breakdown
     summary.appendRow([TextCellValue('')]);
-    summary.appendRow([TextCellValue('Payment Method'), TextCellValue('Amount')]);
+    summary
+        .appendRow([TextCellValue('Payment Method'), TextCellValue('Amount')]);
+    // Style payment header
+    final payHeaderRow = d.config.hasWholesalePrice ? 11 : 9;
+    _styleCell(summary, payHeaderRow, 0, headerStyle);
+    _styleCell(summary, payHeaderRow, 1, headerStyle);
     for (final e in d.paymentBreakdown.entries) {
-      summary.appendRow([TextCellValue(_capitalize(e.key)), TextCellValue(_fmt(e.value))]);
+      summary.appendRow([
+        TextCellValue(_capitalize(e.key)),
+        TextCellValue(_fmt(e.value))
+      ]);
     }
+
+    // Set column widths for readability
+    summary.setColumnWidth(0, 28);
+    summary.setColumnWidth(1, 22);
 
     // ── Sheet 2: Daily Breakdown ──
     final daily = excel['Daily Breakdown'];
@@ -396,6 +439,9 @@ class ReportExportService {
       TextCellValue('Revenue'),
       TextCellValue('Discounts'),
     ]);
+    for (int c = 0; c < 4; c++) {
+      _styleCell(daily, 0, c, headerStyle);
+    }
     for (final day in d.dailyBreakdown) {
       daily.appendRow([
         TextCellValue('${day.day}/${d.month}/${d.year}'),
@@ -404,6 +450,10 @@ class ReportExportService {
         DoubleCellValue(day.discount),
       ]);
     }
+    daily.setColumnWidth(0, 16);
+    daily.setColumnWidth(1, 12);
+    daily.setColumnWidth(2, 18);
+    daily.setColumnWidth(3, 18);
 
     // ── Sheet 3: Top Items ──
     final topSheet = excel['Top Items'];
@@ -413,6 +463,9 @@ class ReportExportService {
       TextCellValue('Qty Sold'),
       TextCellValue('Revenue'),
     ]);
+    for (int c = 0; c < 4; c++) {
+      _styleCell(topSheet, 0, c, headerStyle);
+    }
     for (var i = 0; i < d.topItems.length; i++) {
       final item = d.topItems[i];
       topSheet.appendRow([
@@ -422,6 +475,10 @@ class ReportExportService {
         DoubleCellValue(item.revenue),
       ]);
     }
+    topSheet.setColumnWidth(0, 6);
+    topSheet.setColumnWidth(1, 30);
+    topSheet.setColumnWidth(2, 12);
+    topSheet.setColumnWidth(3, 18);
 
     // ── Sheet 4: Transactions ──
     final txSheet = excel['Transactions'];
@@ -432,6 +489,9 @@ class ReportExportService {
       TextCellValue('Discount'),
       TextCellValue('Payment'),
     ]);
+    for (int c = 0; c < 5; c++) {
+      _styleCell(txSheet, 0, c, headerStyle);
+    }
     for (final s in d.sales) {
       txSheet.appendRow([
         TextCellValue(s.invoiceNumber),
@@ -441,6 +501,11 @@ class ReportExportService {
         TextCellValue(_capitalize(s.paymentMethod)),
       ]);
     }
+    txSheet.setColumnWidth(0, 16);
+    txSheet.setColumnWidth(1, 20);
+    txSheet.setColumnWidth(2, 16);
+    txSheet.setColumnWidth(3, 14);
+    txSheet.setColumnWidth(4, 14);
 
     // ── Sheet 5: Line Items ──
     final itemsSheet = excel['Line Items'];
@@ -452,6 +517,9 @@ class ReportExportService {
       TextCellValue('Discount'),
       TextCellValue('Total'),
     ]);
+    for (int c = 0; c < 6; c++) {
+      _styleCell(itemsSheet, 0, c, headerStyle);
+    }
     for (final item in d.allItems) {
       itemsSheet.appendRow([
         TextCellValue(item.saleId),
@@ -462,6 +530,12 @@ class ReportExportService {
         DoubleCellValue(item.total),
       ]);
     }
+    itemsSheet.setColumnWidth(0, 24);
+    itemsSheet.setColumnWidth(1, 28);
+    itemsSheet.setColumnWidth(2, 14);
+    itemsSheet.setColumnWidth(3, 8);
+    itemsSheet.setColumnWidth(4, 14);
+    itemsSheet.setColumnWidth(5, 14);
 
     // Remove default 'Sheet1' if it exists
     if (excel.sheets.containsKey('Sheet1')) {
@@ -471,11 +545,11 @@ class ReportExportService {
     return excel.encode()!;
   }
 
-  void _excelTitle(Sheet sheet, int row, String text) {
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row)).value =
-        TextCellValue(text);
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row)).cellStyle =
-        CellStyle(bold: true, fontSize: 14);
+  /// Apply a CellStyle to a specific cell by row/col index (after appendRow).
+  void _styleCell(Sheet sheet, int row, int col, CellStyle style) {
+    sheet
+        .cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row))
+        .cellStyle = style;
   }
 
   // ── Helpers ────────────────────────────────────────────────
@@ -485,14 +559,56 @@ class ReportExportService {
       s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
   Future<File> _writeFile(List<int> bytes, String filename) async {
+    final dir = await _getReportsDir();
+    final file = File('${dir.path}/$filename');
+    await file.writeAsBytes(bytes);
+    return file;
+  }
+
+  /// Returns the reports directory, creating it if needed.
+  Future<Directory> _getReportsDir() async {
     final dir = await getApplicationDocumentsDirectory();
-    final reportsDir = Directory('${dir.path}/ShopFlow_Reports');
+    final reportsDir = Directory('${dir.path}/Sleek_Reports');
     if (!await reportsDir.exists()) {
       await reportsDir.create(recursive: true);
     }
-    final file = File('${reportsDir.path}/$filename');
-    await file.writeAsBytes(bytes);
-    return file;
+    return reportsDir;
+  }
+
+  /// List all generated report files, sorted newest-first.
+  Future<List<File>> listReportFiles() async {
+    final dir = await _getReportsDir();
+    if (!await dir.exists()) return [];
+    final entities = await dir.list().toList();
+    final files = entities
+        .whereType<File>()
+        .where((f) {
+          final ext = f.path.split('.').last.toLowerCase();
+          return ext == 'pdf' || ext == 'xlsx';
+        })
+        .toList();
+    files.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
+    return files;
+  }
+
+  /// Rename a report file (keeps it in the same directory).
+  Future<File> renameFile(File file, String newName) async {
+    final dir = file.parent.path;
+    final newPath = '$dir/$newName';
+    return await file.rename(newPath);
+  }
+
+  /// Delete a report file.
+  Future<void> deleteFile(File file) async {
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+
+  /// Returns the full path to the reports directory (for display).
+  Future<String> getReportsDirPath() async {
+    final dir = await _getReportsDir();
+    return dir.path;
   }
 }
 

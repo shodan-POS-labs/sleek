@@ -12,7 +12,7 @@ import 'package:pos_mobile/main.dart';
 void main() {
   testWidgets('App launches and shows login screen', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const ShopFlowApp(initialRoute: '/login'));
-    expect(find.text('ShopFlow POS'), findsOneWidget);
+    await tester.pumpWidget(const SleekApp(initialRoute: '/login'));
+    expect(find.text('Sleek POS'), findsOneWidget);
   });
 }
