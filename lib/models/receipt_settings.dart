@@ -87,6 +87,8 @@ class ReceiptSettings {
   final PrinterType printerType;
   final PaperFormat paperFormat;
   final String bluetoothDeviceAddress; // saved for auto-reconnect
+  final String wifiPrinterIp;          // IP address for network printer
+  final int    wifiPrinterPort;        // port (default 9100 for RAW)
 
   // Business info (override shop profile values per-receipt)
   final String businessName;
@@ -113,6 +115,8 @@ class ReceiptSettings {
     this.printerType = PrinterType.bluetooth,
     this.paperFormat = PaperFormat.mm80,
     this.bluetoothDeviceAddress = '',
+    this.wifiPrinterIp = '',
+    this.wifiPrinterPort = 9100,
     this.businessName = '',
     this.address = '',
     this.phone = '',
@@ -225,6 +229,8 @@ class ReceiptSettings {
     'printerType': printerType.name,
     'paperFormat': paperFormat.name,
     'bluetoothDeviceAddress': bluetoothDeviceAddress,
+    'wifiPrinterIp': wifiPrinterIp,
+    'wifiPrinterPort': wifiPrinterPort,
     'businessName': businessName,
     'address': address,
     'phone': phone,
@@ -251,6 +257,8 @@ class ReceiptSettings {
           (e) => e.name == (m['paperFormat'] as String?),
           orElse: () => PaperFormat.mm80),
       bluetoothDeviceAddress: m['bluetoothDeviceAddress'] as String? ?? '',
+      wifiPrinterIp: m['wifiPrinterIp'] as String? ?? '',
+      wifiPrinterPort: (m['wifiPrinterPort'] as num?)?.toInt() ?? 9100,
       businessName: m['businessName'] as String? ?? '',
       address: m['address'] as String? ?? '',
       phone: m['phone'] as String? ?? '',
@@ -275,6 +283,8 @@ class ReceiptSettings {
     PrinterType? printerType,
     PaperFormat? paperFormat,
     String? bluetoothDeviceAddress,
+    String? wifiPrinterIp,
+    int? wifiPrinterPort,
     String? businessName,
     String? address,
     String? phone,
@@ -293,6 +303,8 @@ class ReceiptSettings {
       printerType: printerType ?? this.printerType,
       paperFormat: paperFormat ?? this.paperFormat,
       bluetoothDeviceAddress: bluetoothDeviceAddress ?? this.bluetoothDeviceAddress,
+      wifiPrinterIp: wifiPrinterIp ?? this.wifiPrinterIp,
+      wifiPrinterPort: wifiPrinterPort ?? this.wifiPrinterPort,
       businessName: businessName ?? this.businessName,
       address: address ?? this.address,
       phone: phone ?? this.phone,

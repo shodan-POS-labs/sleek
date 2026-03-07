@@ -175,11 +175,25 @@ class ReceiptService {
     final savedFile = await saveReceiptPdf(doc, sale.invoiceNumber);
 
     if (settings.printerType == PrinterType.wifi) {
-      final bytes = await doc.save();
-      await Printing.layoutPdf(
-        onLayout: (_) async => bytes,
-        name: 'Receipt_${sale.invoiceNumber}',
-      );
+      if (settings.wifiPrinterIp.isNotEmpty) {
+        // Direct WiFi ESC/POS printing via raw socket
+        await _printWifi(
+          sale: sale,
+          items: items,
+          settings: settings,
+          shopDetails: shopDetails,
+          cashierName: cashierName,
+          customerName: customerName,
+          amountPaid: amountPaid,
+        );
+      } else {
+        // Fallback: system print dialog
+        final bytes = await doc.save();
+        await Printing.layoutPdf(
+          onLayout: (_) async => bytes,
+          name: 'Receipt_${sale.invoiceNumber}',
+        );
+      }
     } else {
       // Bluetooth ESC/POS thermal
       await _printBluetooth(
@@ -420,6 +434,187 @@ class ReceiptService {
     bytes += generator.cut();
 
     await bt.writeBytes(Uint8List.fromList(bytes));
+  }
+
+  // ── WiFi ESC/POS (raw socket) ────────────────────────────────────────────
+
+  Future<void> _printWifi({
+    required Sale sale,
+    required List<SaleItem> items,
+    required ReceiptSettings settings,
+    required Map<String, dynamic> shopDetails,
+    String? cashierName,
+    String? customerName,
+    double amountPaid = 0,
+  }) async {
+    final ip = settings.wifiPrinterIp;
+    final port = settings.wifiPrinterPort;
+    if (ip.isEmpty) throw Exception('WiFi printer IP is not configured. Go to Settings → Printer Settings → WiFi tab.');
+
+    final profile = await CapabilityProfile.load();
+    final paper = settings.paperFormat == PaperFormat.mm58 ? PaperSize.mm58 : PaperSize.mm80;
+    final generator = Generator(paper, profile);
+    var bytes = <int>[];
+
+    final sName = settings.businessName.isNotEmpty
+        ? settings.businessName
+        : (shopDetails['name'] as String? ?? 'Sleek POS');
+    final sAddr  = settings.address.isNotEmpty ? settings.address  : (shopDetails['address']  as String? ?? '');
+    final sPhone = settings.phone.isNotEmpty   ? settings.phone    : (shopDetails['phone']    as String? ?? '');
+
+    bytes += generator.reset();
+
+    // Header
+    if (settings.showBusinessInfo) {
+      bytes += generator.text(sName.toUpperCase(), styles: const PosStyles(bold: true, align: PosAlign.center, height: PosTextSize.size2, width: PosTextSize.size2));
+      if (sAddr.isNotEmpty)  bytes += generator.text(sAddr,  styles: const PosStyles(align: PosAlign.center));
+      if (sPhone.isNotEmpty) bytes += generator.text('Tel: $sPhone', styles: const PosStyles(align: PosAlign.center));
+    }
+    if (settings.headerNote.isNotEmpty) bytes += generator.text(settings.headerNote, styles: const PosStyles(align: PosAlign.center));
+
+    bytes += generator.hr();
+
+    // Transaction info
+    if (settings.showReceiptNumber) bytes += generator.text('Receipt: ${sale.invoiceNumber}');
+    if (settings.showDateTime) {
+      final dateStr = DateFormat('dd/MM/yyyy  HH:mm').format(sale.createdAt);
+      bytes += generator.text('Date: $dateStr');
+    }
+    if (settings.showCashierName && cashierName != null && cashierName.isNotEmpty) {
+      bytes += generator.text('Cashier: $cashierName');
+    }
+    if (settings.showCustomerInfo && customerName != null && customerName.isNotEmpty) {
+      bytes += generator.text('Customer: $customerName');
+    }
+    if (settings.showTableNumber && (sale.tableNumber?.isNotEmpty ?? false)) {
+      bytes += generator.text('Table: ${sale.tableNumber}');
+    }
+    if (settings.showOrderType && sale.orderType.isNotEmpty) {
+      bytes += generator.text('Type: ${_capitalize(sale.orderType)}');
+    }
+
+    bytes += generator.hr();
+    bytes += generator.row([
+      PosColumn(text: 'ITEM', width: 8, styles: const PosStyles(bold: true)),
+      PosColumn(text: 'TOTAL', width: 4, styles: const PosStyles(bold: true, align: PosAlign.right)),
+    ]);
+    bytes += generator.hr();
+
+    // Items
+    double subtotal = 0;
+    double discountTotal = sale.discount;
+    for (final item in items) {
+      final lineTotal = item.total;
+      subtotal += lineTotal;
+      discountTotal += item.discount;
+
+      bytes += generator.row([
+        PosColumn(text: item.productName, width: 8),
+        PosColumn(text: _fmt.format(lineTotal), width: 4, styles: const PosStyles(align: PosAlign.right)),
+      ]);
+      bytes += generator.text('  x${item.quantity} @ ${_fmt.format(item.price)}');
+
+      if (settings.showVariants && (item.selectedVariant?.isNotEmpty ?? false)) {
+        bytes += generator.text('  Variant: ${item.selectedVariant}');
+      }
+      if (settings.showModifiers && item.selectedModifiers.isNotEmpty) {
+        for (final mod in item.selectedModifiers) {
+          final mp = (mod['price'] as num?)?.toDouble() ?? 0;
+          final mn = mod['name'] as String? ?? '';
+          bytes += generator.text('  + $mn  +${_fmt.format(mp)}');
+        }
+      }
+      if (settings.showItemNotes && (item.notes?.isNotEmpty ?? false)) {
+        bytes += generator.text('  Note: ${item.notes}');
+      }
+    }
+
+    bytes += generator.hr();
+
+    // Totals
+    if (settings.showSubtotal) {
+      bytes += generator.row([
+        PosColumn(text: 'Subtotal', width: 6),
+        PosColumn(text: _fmt.format(subtotal), width: 6, styles: const PosStyles(align: PosAlign.right)),
+      ]);
+    }
+    if (settings.showDiscount && discountTotal > 0) {
+      bytes += generator.row([
+        PosColumn(text: 'Discount', width: 6),
+        PosColumn(text: '-${_fmt.format(discountTotal)}', width: 6, styles: const PosStyles(align: PosAlign.right)),
+      ]);
+    }
+    if (settings.showGrandTotal) {
+      bytes += generator.hr();
+      bytes += generator.row([
+        PosColumn(text: 'TOTAL', width: 6, styles: const PosStyles(bold: true, height: PosTextSize.size2)),
+        PosColumn(text: _fmt.format(sale.totalAmount), width: 6, styles: const PosStyles(bold: true, height: PosTextSize.size2, align: PosAlign.right)),
+      ]);
+    }
+
+    // Advance payment
+    if (settings.showAdvanceAmount && sale.advanceAmount > 0) {
+      bytes += generator.row([
+        PosColumn(text: 'Advance Paid', width: 6),
+        PosColumn(text: _fmt.format(sale.advanceAmount), width: 6, styles: const PosStyles(align: PosAlign.right)),
+      ]);
+      final remaining = sale.totalAmount - sale.advanceAmount;
+      if (settings.showRemainingBal) {
+        bytes += generator.row([
+          PosColumn(text: 'Balance Due', width: 6, styles: const PosStyles(bold: true)),
+          PosColumn(text: _fmt.format(remaining), width: 6, styles: const PosStyles(bold: true, align: PosAlign.right)),
+        ]);
+      }
+    }
+
+    // Payment
+    if (settings.showPaymentMethod && sale.paymentMethod.isNotEmpty) {
+      bytes += generator.text('Payment: ${_capitalize(sale.paymentMethod)}');
+    }
+    if (settings.showAmountPaid && amountPaid > 0) {
+      bytes += generator.row([
+        PosColumn(text: 'Amount Paid', width: 6),
+        PosColumn(text: _fmt.format(amountPaid), width: 6, styles: const PosStyles(align: PosAlign.right)),
+      ]);
+      if (settings.showChange && amountPaid > sale.totalAmount) {
+        final change = amountPaid - sale.totalAmount;
+        bytes += generator.row([
+          PosColumn(text: 'Change', width: 6),
+          PosColumn(text: _fmt.format(change), width: 6, styles: const PosStyles(align: PosAlign.right)),
+        ]);
+      }
+    }
+
+    bytes += generator.hr();
+
+    // Footer
+    if (settings.showReturnPolicy && settings.returnPolicy.isNotEmpty) {
+      bytes += generator.text(settings.returnPolicy, styles: const PosStyles(align: PosAlign.center));
+    }
+    if (settings.showWarrantyText && settings.warrantyText.isNotEmpty) {
+      bytes += generator.text(settings.warrantyText, styles: const PosStyles(align: PosAlign.center));
+    }
+    if (settings.showSignatureBox) {
+      bytes += generator.emptyLines(2);
+      bytes += generator.text('Customer Signature: ___________');
+      bytes += generator.emptyLines(1);
+    }
+    if (settings.showThankYouMsg && settings.thankYouMessage.isNotEmpty) {
+      bytes += generator.text(settings.thankYouMessage, styles: const PosStyles(align: PosAlign.center, bold: true));
+    }
+
+    bytes += generator.emptyLines(2);
+    bytes += generator.cut();
+
+    // Send bytes over TCP socket
+    Socket? socket;
+    try {
+      socket = await Socket.connect(ip, port, timeout: const Duration(seconds: 5));
+      socket.add(Uint8List.fromList(bytes));
+      await socket.flush();
+    } finally {
+      socket?.destroy();
+    }
   }
 
   // ── PDF : Thermal content (single Page) ─────────────────────────────────

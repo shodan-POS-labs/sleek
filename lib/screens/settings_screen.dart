@@ -10,6 +10,9 @@ import '../models/app_user.dart';
 import '../models/business_config.dart';
 import '../utils/error_helpers.dart';
 import 'package:blue_thermal_printer/blue_thermal_printer.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 
@@ -299,6 +302,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateSB) {
           return AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Text('Add Cashier', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
             content: SingleChildScrollView(
@@ -403,6 +407,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateSB) {
           return AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Text('Profile Settings', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
             content: SizedBox(
@@ -547,83 +552,324 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (context.mounted) Navigator.pop(context);
 
     if (!context.mounted) return;
+
+    // WiFi printer state
+    final wifiIpCtrl = TextEditingController();
+    final wifiPortCtrl = TextEditingController(text: '9100');
+    bool wifiConnected = false;
+    bool wifiConnecting = false;
+    String wifiStatus = 'Not connected';
+    Socket? wifiSocket;
+    int selectedTab = 0; // 0 = Bluetooth, 1 = WiFi
+
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateSB) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text('Printer Settings', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (devices.isEmpty)
-                  Text('No paired Bluetooth printers found. Pair a printer in device settings first.', style: GoogleFonts.inter(color: AppTheme.error)),
-                if (devices.isNotEmpty)
-                  DropdownButtonFormField<BluetoothDevice>(
-                    value: selectedDevice,
-                    decoration: InputDecoration(
-                      labelText: 'Select Printer',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    items: devices.map((d) => DropdownMenuItem(value: d, child: Text(d.name ?? 'Unknown'))).toList(),
-                    onChanged: (val) {
-                      setStateSB(() => selectedDevice = val);
-                    },
+          // ── Bluetooth content ──
+          Widget bluetoothContent() => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (devices.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      const Icon(LucideIcons.bluetoothOff, size: 20, color: AppTheme.error),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text('No paired Bluetooth printers found.\nPair a printer in device settings first.', style: GoogleFonts.inter(color: AppTheme.error, fontSize: 13))),
+                    ],
                   ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                ),
+              if (devices.isNotEmpty)
+                DropdownButtonFormField<BluetoothDevice>(
+                  value: selectedDevice,
+                  decoration: InputDecoration(
+                    labelText: 'Select Printer',
+                    prefixIcon: const Icon(LucideIcons.bluetooth, size: 18, color: AppTheme.info),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  isExpanded: true,
+                  items: devices.map((d) => DropdownMenuItem(value: d, child: Text(d.name ?? 'Unknown', overflow: TextOverflow.ellipsis, maxLines: 1))).toList(),
+                  onChanged: (val) {
+                    setStateSB(() => selectedDevice = val);
+                  },
+                ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isConnected ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: isConnected ? Colors.green.withOpacity(0.3) : AppTheme.error.withOpacity(0.3)),
+                ),
+                child: Row(
                   children: [
-                    Text('Status: ', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-                    Text(isConnected ? 'Connected' : 'Disconnected', style: GoogleFonts.inter(color: isConnected ? Colors.green : AppTheme.error)),
+                    Icon(isConnected ? LucideIcons.checkCircle2 : LucideIcons.xCircle, size: 18, color: isConnected ? Colors.green : AppTheme.error),
+                    const SizedBox(width: 8),
+                    Text(isConnected ? 'Connected' : 'Disconnected', style: GoogleFonts.inter(fontWeight: FontWeight.w500, color: isConnected ? Colors.green : AppTheme.error)),
                   ],
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: selectedDevice == null ? null : () async {
-                          if (isConnected) {
-                            await bluetooth.disconnect();
-                            setStateSB(() => isConnected = false);
-                            setState(() => isConnected = false);
-                          } else {
-                            try {
-                              await bluetooth.connect(selectedDevice!);
-                              setStateSB(() => isConnected = true);
-                              setState(() => isConnected = true);
-                            } catch (e) {
-                              if (ctx.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to connect: $e')));
-                              }
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: Icon(isConnected ? LucideIcons.unplug : LucideIcons.plug, size: 16),
+                      onPressed: selectedDevice == null ? null : () async {
+                        if (isConnected) {
+                          await bluetooth.disconnect();
+                          setStateSB(() => isConnected = false);
+                          setState(() => isConnected = false);
+                        } else {
+                          try {
+                            await bluetooth.connect(selectedDevice!);
+                            setStateSB(() => isConnected = true);
+                            setState(() => isConnected = true);
+                          } catch (e) {
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to connect: $e')));
                             }
                           }
-                        },
-                        child: Text(isConnected ? 'Disconnect' : 'Connect'),
-                      ),
+                        }
+                      },
+                      label: Text(isConnected ? 'Disconnect' : 'Connect'),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(LucideIcons.printer, size: 16),
+                      onPressed: (!isConnected || selectedDevice == null) ? null : () async {
+                        await bluetooth.printCustom("Sleek POS", 3, 1);
+                        await bluetooth.printNewLine();
+                        await bluetooth.printCustom("Test Print Successful!", 1, 1);
+                        await bluetooth.printNewLine();
+                        await bluetooth.printNewLine();
+                        await bluetooth.paperCut();
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Test page sent to Bluetooth printer'), backgroundColor: Colors.green));
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
+                      label: const Text('Test Print'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+
+          // ── WiFi content ──
+          Widget wifiContent() => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Icon(LucideIcons.wifi, size: 18, color: AppTheme.info),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Connect to a network/WiFi receipt printer using its IP address and port.', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary))),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: wifiIpCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Printer IP Address',
+                  hintText: 'e.g. 192.168.1.100',
+                  prefixIcon: const Icon(LucideIcons.globe, size: 18, color: AppTheme.info),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: wifiPortCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Port',
+                  hintText: '9100',
+                  prefixIcon: const Icon(LucideIcons.hash, size: 18, color: AppTheme.info),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: wifiConnected ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: wifiConnected ? Colors.green.withOpacity(0.3) : AppTheme.error.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    if (wifiConnecting)
+                      const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    else
+                      Icon(wifiConnected ? LucideIcons.checkCircle2 : LucideIcons.xCircle, size: 18, color: wifiConnected ? Colors.green : AppTheme.error),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(wifiStatus, style: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 13, color: wifiConnected ? Colors.green : (wifiConnecting ? AppTheme.textSecondary : AppTheme.error)))),
                   ],
                 ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: Icon(wifiConnected ? LucideIcons.unplug : LucideIcons.plug, size: 16),
+                      onPressed: wifiConnecting ? null : () async {
+                        final ip = wifiIpCtrl.text.trim();
+                        final port = int.tryParse(wifiPortCtrl.text.trim()) ?? 9100;
+                        if (ip.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter the printer IP address'), backgroundColor: AppTheme.error));
+                          return;
+                        }
+                        if (wifiConnected) {
+                          // Disconnect
+                          try { wifiSocket?.destroy(); } catch (_) {}
+                          setStateSB(() { wifiConnected = false; wifiSocket = null; wifiStatus = 'Disconnected'; });
+                        } else {
+                          // Connect
+                          setStateSB(() { wifiConnecting = true; wifiStatus = 'Connecting to $ip:$port...'; });
+                          try {
+                            final socket = await Socket.connect(ip, port, timeout: const Duration(seconds: 5));
+                            wifiSocket = socket;
+                            setStateSB(() { wifiConnected = true; wifiConnecting = false; wifiStatus = 'Connected to $ip:$port'; });
+                          } catch (e) {
+                            setStateSB(() { wifiConnecting = false; wifiStatus = 'Failed: ${e.toString().split('\n').first}'; });
+                          }
+                        }
+                      },
+                      label: Text(wifiConnected ? 'Disconnect' : 'Connect'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(LucideIcons.printer, size: 16),
+                      onPressed: !wifiConnected ? null : () async {
+                        try {
+                          final profile = await CapabilityProfile.load();
+                          final generator = Generator(PaperSize.mm80, profile);
+                          var bytes = <int>[];
+                          bytes += generator.reset();
+                          bytes += generator.text('Sleek POS', styles: const PosStyles(bold: true, align: PosAlign.center, height: PosTextSize.size2, width: PosTextSize.size2));
+                          bytes += generator.emptyLines(1);
+                          bytes += generator.text('WiFi Test Print Successful!', styles: const PosStyles(align: PosAlign.center));
+                          bytes += generator.emptyLines(2);
+                          bytes += generator.cut();
+                          wifiSocket?.add(Uint8List.fromList(bytes));
+                          await wifiSocket?.flush();
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Test page sent to WiFi printer'), backgroundColor: Colors.green));
+                          }
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Print failed: $e'), backgroundColor: AppTheme.error));
+                          }
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
+                      label: const Text('Test Print'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+
+          return AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: [
+                const Icon(LucideIcons.printer, color: AppTheme.info),
+                const SizedBox(width: 8),
+                Text('Printer Settings', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
               ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Tab selector
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.background,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setStateSB(() => selectedTab = 0),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: selectedTab == 0 ? Colors.white : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: selectedTab == 0 ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4)] : null,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(LucideIcons.bluetooth, size: 16, color: selectedTab == 0 ? AppTheme.info : AppTheme.textSecondary),
+                                    const SizedBox(width: 6),
+                                    Text('Bluetooth', style: GoogleFonts.inter(fontSize: 13, fontWeight: selectedTab == 0 ? FontWeight.w600 : FontWeight.normal, color: selectedTab == 0 ? AppTheme.textPrimary : AppTheme.textSecondary)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setStateSB(() => selectedTab = 1),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: selectedTab == 1 ? Colors.white : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: selectedTab == 1 ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4)] : null,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(LucideIcons.wifi, size: 16, color: selectedTab == 1 ? AppTheme.info : AppTheme.textSecondary),
+                                    const SizedBox(width: 6),
+                                    Text('WiFi', style: GoogleFonts.inter(fontSize: 13, fontWeight: selectedTab == 1 ? FontWeight.w600 : FontWeight.normal, color: selectedTab == 1 ? AppTheme.textPrimary : AppTheme.textSecondary)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Tab content
+                    if (selectedTab == 0) bluetoothContent(),
+                    if (selectedTab == 1) wifiContent(),
+                  ],
+                ),
+              ),
             ),
             actions: [
               OutlinedButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text('Close', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
-              ),
-              ElevatedButton(
-                onPressed: (!isConnected || selectedDevice == null) ? null : () async {
-                  await bluetooth.printCustom("Sleek POS", 3, 1);
-                  await bluetooth.printNewLine();
-                  await bluetooth.printCustom("Test Print Successful!", 1, 1);
-                  await bluetooth.printNewLine();
-                  await bluetooth.printNewLine();
-                  await bluetooth.paperCut();
+                onPressed: () {
+                  // Clean up wifi socket on close if still connected
+                  if (wifiConnected && wifiSocket != null) {
+                    try { wifiSocket!.destroy(); } catch (_) {}
+                  }
+                  Navigator.pop(ctx);
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
-                child: const Text('Test Print'),
+                child: Text('Close', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
               ),
             ],
           );
@@ -635,6 +881,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Privacy Policy', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
         content: SingleChildScrollView(
@@ -667,6 +914,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateSB) {
           return AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Text('Contact Support', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
             content: Column(
@@ -780,6 +1028,7 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
 
           if (!dataReady) {
             return AlertDialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: Text('Notifications', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
               content: const SizedBox(
@@ -942,6 +1191,7 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
           }
 
           return AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20)),
             title: Text('Notifications',
@@ -1039,6 +1289,7 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
           }
 
           return AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Row(
               children: [
@@ -1109,6 +1360,7 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateSB) {
           return AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Text('Reset PIN for ${cashier.name}', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
             content: Column(
