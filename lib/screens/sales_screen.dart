@@ -6,9 +6,11 @@ import '../core/theme/app_theme.dart';
 import '../widgets/bottom_nav.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import '../services/receipt_service.dart';
 import '../models/product.dart';
 import '../models/sale.dart';
 import '../models/business_config.dart';
+import '../models/receipt_settings.dart';
 import 'package:barcode_scan2/barcode_scan2.dart';
 
 class SalesScreen extends StatefulWidget {
@@ -187,34 +189,90 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Future<void> _handlePayment() async {
     if (_cart.isEmpty) return;
+    setState(() => _loading = true);
 
-    final invoiceNumber = await _db.generateInvoiceNumber(_shopId);
-    final sale = Sale(
-      invoiceNumber: invoiceNumber,
-      totalAmount: totalAmount,
-      paymentMethod: 'cash',
-    );
-    final saleItems = _cart.entries.map((e) => SaleItem(
-      saleId: '', // Will be set by the DB
-      productId: e.key,
-      productName: e.value.product.name,
-      price: e.value.product.retailPrice,
-      quantity: e.value.quantity,
-    )).toList();
-
-    await _db.insertSale(_shopId, sale, saleItems);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Payment of Rs. ${NumberFormat('#,###').format(totalAmount.toInt())} processed! $invoiceNumber'),
-          backgroundColor: AppTheme.primaryColor,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+    try {
+      final invoiceNumber = await _db.generateInvoiceNumber(_shopId);
+      final sale = Sale(
+        invoiceNumber: invoiceNumber,
+        totalAmount: totalAmount,
+        paymentMethod: 'cash',
       );
-      setState(() { _cart.clear(); _showCart = false; });
-      _loadProducts(); // Refresh stock
+      final saleItems = _cart.entries.map((e) => SaleItem(
+        saleId: '',
+        productId: e.value.product.id ?? '',
+        productName: e.value.product.name,
+        price: e.value.product.retailPrice,
+        quantity: e.value.quantity,
+        selectedModifiers: e.value.selectedModifiers,
+        selectedVariant: e.value.selectedVariant,
+        variantPriceAdjustment: e.value.variantPriceAdjustment,
+        notes: '',
+      )).toList();
+
+      await _db.insertSale(_shopId, sale, saleItems);
+
+      // ── Print & Save Receipt ──────────────────────────────
+      if (mounted) {
+        final shopData = await _db.getShopDetails(_shopId);
+        ReceiptSettings receiptSettings = const ReceiptSettings();
+        if (shopData != null && shopData['receiptSettingsV2'] != null) {
+          receiptSettings = ReceiptSettings.fromMap(
+              Map<String, dynamic>.from(shopData['receiptSettingsV2'] as Map));
+        }
+
+        final cashierName = _auth.currentUser?.name ?? '';
+        try {
+          if (!mounted) return;
+          final savedFile = await ReceiptService().printReceipt(
+            context: context,
+            sale: sale,
+            items: saleItems,
+            settings: receiptSettings,
+            shopDetails: shopData ?? {},
+            cashierName: cashierName,
+          );
+          if (mounted) {
+            setState(() { _cart.clear(); _showCart = false; _loading = false; });
+            _loadProducts();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Rs. ${NumberFormat('#,###').format(totalAmount.toInt())} — $invoiceNumber  ·  Receipt saved'),
+                backgroundColor: AppTheme.primaryColor,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                action: SnackBarAction(
+                  label: 'Share',
+                  textColor: Colors.white,
+                  onPressed: () => ReceiptService().shareReceipt(savedFile),
+                ),
+              ),
+            );
+          }
+        } catch (printErr) {
+          // Print failed (e.g. no printer) — sale is still saved, just show info
+          if (mounted) {
+            setState(() { _cart.clear(); _showCart = false; _loading = false; });
+            _loadProducts();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Payment saved — $invoiceNumber. Print failed: $printErr'),
+                backgroundColor: AppTheme.warning,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Payment error: $e'), backgroundColor: AppTheme.error),
+        );
+      }
     }
   }
 
@@ -242,6 +300,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
       if (found != null) {
         _addToCart(found);
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Added "${found.name}" to cart'),
@@ -252,6 +311,7 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
         );
       } else {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('No product found with barcode: $barcode'),

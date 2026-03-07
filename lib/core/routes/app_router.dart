@@ -9,6 +9,8 @@ import '../../screens/reports_screen.dart';
 import '../../screens/settings_screen.dart';
 import '../../screens/register_screen.dart';
 import '../../screens/saved_reports_screen.dart';
+import '../../screens/receipt_settings_screen.dart';
+import '../../screens/saved_receipts_screen.dart';
 
 class AppRouter {
   static GoRouter getRouter(String initialRoute) {
@@ -57,6 +59,14 @@ class AppRouter {
       GoRoute(
         path: '/saved-reports',
         builder: (context, state) => const SavedReportsScreen(),
+      ),
+      GoRoute(
+        path: '/receipt-settings',
+        builder: (context, state) => const ReceiptSettingsScreen(),
+      ),
+      GoRoute(
+        path: '/saved-receipts',
+        builder: (context, state) => const SavedReceiptsScreen(),
       ),
       ],
     );

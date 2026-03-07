@@ -40,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'title': 'Preferences',
         'items': [
           {'icon': LucideIcons.receipt, 'label': 'Receipt Settings', 'color': AppTheme.warning, 'bg': const Color(0xFFFFF7ED), 'action': 'receipt_settings'},
+          {'icon': LucideIcons.folderOpen, 'label': 'Saved Receipts', 'color': AppTheme.primaryColor, 'bg': const Color(0xFFF0FDF4), 'action': 'saved_receipts'},
           {'icon': LucideIcons.printer, 'label': 'Printer Settings', 'color': AppTheme.info, 'bg': const Color(0xFFEFF6FF), 'action': 'printer_settings'},
           {'icon': LucideIcons.shieldCheck, 'label': 'Privacy Policy', 'color': AppTheme.error, 'bg': const Color(0xFFFEF2F2), 'action': 'privacy_policy'},
         ],
@@ -177,7 +178,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   } else if (item['action'] == 'profile_settings') {
                                     _showProfileSettingsDialog(context);
                                   } else if (item['action'] == 'receipt_settings') {
-                                    _showReceiptSettingsDialog(context);
+                                    context.push('/receipt-settings');
+                                  } else if (item['action'] == 'saved_receipts') {
+                                    context.push('/saved-receipts');
                                   } else if (item['action'] == 'printer_settings') {
                                     _showPrinterSettingsDialog(context);
                                   } else if (item['action'] == 'privacy_policy') {
@@ -357,7 +360,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     }
                   } catch (e) {
                     setStateSB(() => isAdding = false);
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
+                    }
                   }
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
@@ -511,89 +516,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   } 
 
-  Future<void> _showReceiptSettingsDialog(BuildContext context) async {
-    final user = _auth.currentUser;
-    if (user == null || user.role != UserRole.admin) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Only Admins can change receipt settings.')));
-      return;
-    }
-
-    final headerCtrl = TextEditingController();
-    final footerCtrl = TextEditingController();
-    
-    // Pre-load existing settings BEFORE opening the dialog
-    try {
-      final data = await _firestoreService.getShopDetails(user.shopId);
-      if (data != null && data['receiptSettings'] != null) {
-        headerCtrl.text = data['receiptSettings']['header'] ?? '';
-        footerCtrl.text = data['receiptSettings']['footer'] ?? '';
-      }
-    } catch (_) {}
-
-    if (!context.mounted) return;
-
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateSB) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text('Receipt Settings', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Custom Messages', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textSecondary, letterSpacing: 1.2)),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: headerCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Header/Greeting',
-                      prefixIcon: const Icon(LucideIcons.messageSquare, color: AppTheme.primaryColor),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: footerCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Footer/Thank You',
-                      prefixIcon: const Icon(LucideIcons.messageSquare, color: AppTheme.primaryColor),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              OutlinedButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  await _firestoreService.updateShopDetails(user.shopId, {
-                    'receiptSettings': {
-                      'header': headerCtrl.text.trim(),
-                      'footer': footerCtrl.text.trim(),
-                    }
-                  });
-                  if (ctx.mounted) {
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Receipt settings saved!'), backgroundColor: Colors.green));
-                  }
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        }
-      ),
-    );
-  }
 
   BlueThermalPrinter bluetooth = BlueThermalPrinter.instance;
   List<BluetoothDevice> devices = [];
@@ -624,6 +546,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (_) {}
     if (context.mounted) Navigator.pop(context);
 
+    if (!context.mounted) return;
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -672,7 +595,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               setStateSB(() => isConnected = true);
                               setState(() => isConnected = true);
                             } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to connect: $e')));
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to connect: $e')));
+                              }
                             }
                           }
                         },

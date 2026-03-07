@@ -1,5 +1,5 @@
-/// Business Config Engine
-/// Maps each BusinessType to a set of feature flags that drive the UI.
+// Business Config Engine
+// Maps each BusinessType to a set of feature flags that drive the UI.
 
 enum BusinessType {
   retail,

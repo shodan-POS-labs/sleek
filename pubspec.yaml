@@ -37,6 +37,7 @@ dependencies:
   intl: any
   mailer: ^7.1.0
   blue_thermal_printer: ^1.2.3
+  esc_pos_utils_plus: ^2.0.3
   barcode_scan2: ^4.4.0
   pdf: ^3.11.1
   printing: ^5.13.3

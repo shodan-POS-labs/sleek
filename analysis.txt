@@ -1,0 +1,2 @@
+[info] Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check (C:\Users\somap\Documents\projects\POS mobile\pos_mobile\lib\screens\sales_screen.dart:228:13)
+[info] Don't use 'BuildContext's across async gaps (C:\Users\somap\Documents\projects\POS mobile\pos_mobile\lib\screens\settings_screen.dart:550:7)

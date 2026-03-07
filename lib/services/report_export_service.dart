@@ -369,7 +369,6 @@ class ReportExportService {
     final avgOrderValue =
         d.totalOrders > 0 ? d.totalRevenue / d.totalOrders : 0.0;
 
-    final boldStyle = CellStyle(bold: true, fontSize: 12);
     final headerStyle = CellStyle(
       bold: true,
       fontSize: 11,

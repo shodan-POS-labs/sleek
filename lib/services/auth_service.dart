@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:local_auth/local_auth.dart';
 import '../models/app_user.dart';
 
@@ -192,7 +193,7 @@ class AuthService {
       if (e is StateError) {
         rethrow; // Propagate session expired error
       }
-      print("Error logging in with PIN: $e");
+      debugPrint("Error logging in with PIN: $e");
     }
     return null;
   }
@@ -258,7 +259,7 @@ class AuthService {
       if (e is StateError) {
         rethrow; // Propagate session expired error to UI
       }
-      print("Error with biometrics: $e");
+      debugPrint("Error with biometrics: $e");
     }
     return null;
   }

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/product.dart';
+import 'package:flutter/foundation.dart';
 import '../models/customer.dart';
 import '../models/sale.dart';
 import '../models/business_config.dart';
@@ -31,7 +32,7 @@ class FirestoreService {
       final doc = await _db.collection('shops').doc(shopId).get();
       if (doc.exists) return doc.data();
     } catch (e) {
-      print("Error fetching shop details: $e");
+      debugPrint("Error fetching shop details: $e");
     }
     return null;
   }
@@ -201,8 +202,10 @@ class FirestoreService {
       batch.set(itemRef, itemData);
 
       // Deduct stock from scoped products subcollection
-      final productRef = _products(shopId).doc(item.productId);
-      batch.update(productRef, {'stock': FieldValue.increment(-item.quantity)});
+      if (item.productId.isNotEmpty) {
+        final productRef = _products(shopId).doc(item.productId);
+        batch.update(productRef, {'stock': FieldValue.increment(-item.quantity)});
+      }
     }
 
     // Update customer balance if credit
