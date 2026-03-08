@@ -6,6 +6,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
 import '../core/theme/app_theme.dart';
 import '../services/receipt_service.dart';
+import '../utils/error_helpers.dart';
 
 class SavedReceiptsScreen extends StatefulWidget {
   const SavedReceiptsScreen({super.key});
@@ -66,7 +67,7 @@ class _SavedReceiptsScreenState extends State<SavedReceiptsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error),
         );
       }
     }

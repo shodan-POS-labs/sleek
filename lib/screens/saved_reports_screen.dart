@@ -6,6 +6,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
 import '../core/theme/app_theme.dart';
 import '../services/report_export_service.dart';
+import '../utils/error_helpers.dart';
 
 /// Screen listing all previously generated report files with actions:
 /// rename, share, delete.
@@ -346,7 +347,7 @@ class _SavedReportsScreenState extends State<SavedReportsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Share failed: $e'),
+            content: Text(friendlyErrorMessage(e)),
             backgroundColor: AppTheme.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -423,7 +424,7 @@ class _SavedReportsScreenState extends State<SavedReportsScreen> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Rename failed: $e'),
+                      content: Text(friendlyErrorMessage(e)),
                       backgroundColor: AppTheme.error,
                       behavior: SnackBarBehavior.floating,
                     ),
@@ -486,7 +487,7 @@ class _SavedReportsScreenState extends State<SavedReportsScreen> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Delete failed: $e'),
+                      content: Text(friendlyErrorMessage(e)),
                       backgroundColor: AppTheme.error,
                       behavior: SnackBarBehavior.floating,
                     ),

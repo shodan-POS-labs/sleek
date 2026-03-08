@@ -8,6 +8,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../core/theme/app_theme.dart';
 import '../widgets/bottom_nav.dart';
+import '../utils/error_helpers.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/report_export_service.dart';
@@ -591,7 +592,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       if (ctx.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Export failed: $e'),
+            content: Text(friendlyErrorMessage(e)),
             backgroundColor: AppTheme.error,
             behavior: SnackBarBehavior.floating,
           ),

@@ -6,6 +6,7 @@ import '../core/theme/app_theme.dart';
 import '../models/receipt_settings.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import '../utils/error_helpers.dart';
 
 class ReceiptSettingsScreen extends StatefulWidget {
   const ReceiptSettingsScreen({super.key});
@@ -121,7 +122,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
       setState(() => _saving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error),
         );
       }
     }

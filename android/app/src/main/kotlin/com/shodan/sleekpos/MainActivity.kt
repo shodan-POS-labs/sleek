@@ -1,4 +1,4 @@
-package com.sleek.app
+package com.shodan.sleekpos
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

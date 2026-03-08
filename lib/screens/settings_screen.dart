@@ -547,7 +547,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (_) => const AlertDialog(content: SizedBox(height: 100, child: Center(child: CircularProgressIndicator()))),
     );
     try {
-      devices = await bluetooth.getBondedDevices();
+      final allDevices = await bluetooth.getBondedDevices();
+      // Filter out devices that are obviously not printers (headphones, speakers, watches, etc.)
+      const _nonPrinterKeywords = ['headphone', 'earphone', 'earbud', 'buds', 'airpod', 'speaker',
+        'watch', 'band', 'fitbit', 'garmin', 'galaxy watch', 'mi band', 'audio',
+        'soundbar', 'jbl', 'sony wh', 'sony wf', 'bose', 'beats', 'airdots',
+        'car', 'handsfree', 'hands-free', 'hfp', 'keyboard', 'mouse', 'gamepad',
+        'controller', 'tv', 'laptop', 'phone', 'tablet', 'pc'];
+      devices = allDevices.where((d) {
+        final name = (d.name ?? '').toLowerCase();
+        return !_nonPrinterKeywords.any((kw) => name.contains(kw));
+      }).toList();
     } catch (_) {}
     if (context.mounted) Navigator.pop(context);
 
@@ -581,7 +591,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
-              if (devices.isNotEmpty)
+              if (devices.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      const Icon(LucideIcons.info, size: 14, color: AppTheme.textSecondary),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text('Only thermal receipt printers are shown. If your printer is missing, make sure it is paired in device Bluetooth settings.', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textSecondary))),
+                    ],
+                  ),
+                ),
                 DropdownButtonFormField<BluetoothDevice>(
                   value: selectedDevice,
                   decoration: InputDecoration(
@@ -595,6 +615,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     setStateSB(() => selectedDevice = val);
                   },
                 ),
+              ],
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -629,7 +650,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             setState(() => isConnected = true);
                           } catch (e) {
                             if (ctx.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to connect: $e')));
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
                             }
                           }
                         }
@@ -642,14 +663,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: ElevatedButton.icon(
                       icon: const Icon(LucideIcons.printer, size: 16),
                       onPressed: (!isConnected || selectedDevice == null) ? null : () async {
-                        await bluetooth.printCustom("Sleek POS", 3, 1);
-                        await bluetooth.printNewLine();
-                        await bluetooth.printCustom("Test Print Successful!", 1, 1);
-                        await bluetooth.printNewLine();
-                        await bluetooth.printNewLine();
-                        await bluetooth.paperCut();
-                        if (ctx.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Test page sent to Bluetooth printer'), backgroundColor: Colors.green));
+                        try {
+                          await bluetooth.printCustom("Sleek POS", 3, 1);
+                          await bluetooth.printNewLine();
+                          await bluetooth.printCustom("Test Print Successful!", 1, 1);
+                          await bluetooth.printNewLine();
+                          await bluetooth.printNewLine();
+                          await bluetooth.paperCut();
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Test page sent to Bluetooth printer'), backgroundColor: Colors.green));
+                          }
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
+                          }
                         }
                       },
                       style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
@@ -738,7 +765,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             wifiSocket = socket;
                             setStateSB(() { wifiConnected = true; wifiConnecting = false; wifiStatus = 'Connected to $ip:$port'; });
                           } catch (e) {
-                            setStateSB(() { wifiConnecting = false; wifiStatus = 'Failed: ${e.toString().split('\n').first}'; });
+                            setStateSB(() { wifiConnecting = false; wifiStatus = friendlyErrorMessage(e); });
                           }
                         }
                       },
@@ -767,7 +794,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           }
                         } catch (e) {
                           if (ctx.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Print failed: $e'), backgroundColor: AppTheme.error));
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
                           }
                         }
                       },
@@ -961,7 +988,7 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
                     }
                   } catch (e) {
                     setStateSB(() => isLoading = false);
-                    if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send message: ${e.toString().split('\n')[0]}'), backgroundColor: AppTheme.error));
+                    if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
                   }
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),

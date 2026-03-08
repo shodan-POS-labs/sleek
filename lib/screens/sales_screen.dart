@@ -6,6 +6,7 @@ import '../core/theme/app_theme.dart';
 import '../widgets/bottom_nav.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import '../utils/error_helpers.dart';
 import '../services/receipt_service.dart';
 import '../models/product.dart';
 import '../models/sale.dart';
@@ -270,7 +271,7 @@ class _SalesScreenState extends State<SalesScreen> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Payment error: $e'), backgroundColor: AppTheme.error),
+          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error),
         );
       }
     }

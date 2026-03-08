@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:141157114485:android:e18226d8a0b90ef9e4ce3c",
+        "mobilesdk_app_id": "1:141157114485:android:4a96746a1022cf30e4ce3c",
         "android_client_info": {
-          "package_name": "com.sleek.app"
+          "package_name": "com.shodan.sleekpos"
         }
       },
       "oauth_client": [],
