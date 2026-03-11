@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../core/theme/app_theme.dart';
 import '../widgets/bottom_nav.dart';
 import '../services/firestore_service.dart';
@@ -12,7 +14,6 @@ import '../models/product.dart';
 import '../models/sale.dart';
 import '../models/business_config.dart';
 import '../models/receipt_settings.dart';
-import 'package:barcode_scan2/barcode_scan2.dart';
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -277,54 +278,80 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  Future<void> _scanAndAddToCart() async {
+  Future<void> _lookupAndAddBarcode(String barcode) async {
+    // First check if the product is already in the loaded list
+    Product? found;
     try {
-      final result = await BarcodeScanner.scan();
-      final barcode = result.rawContent;
-      if (barcode.isEmpty) return;
-
-      // First check if the product is already in the loaded list
-      Product? found;
-      try {
-        found = _products.firstWhere((p) => p.barcode == barcode);
-      } catch (_) {
-        found = null;
-      }
-
-      // If not found in loaded list, query Firestore directly
-      if (found == null) {
-        final all = await _db.getProducts(_shopId);
-        final matches = all.where((p) => p.barcode == barcode);
-        found = matches.isEmpty ? null : matches.first;
-      }
-
-
-      if (found != null) {
-        _addToCart(found);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Added "${found.name}" to cart'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 1),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No product found with barcode: $barcode'),
-            backgroundColor: AppTheme.warning,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
+      found = _products.firstWhere((p) => p.barcode == barcode);
     } catch (_) {
-      // User cancelled scan
+      found = null;
     }
+
+    // If not found in loaded list, query Firestore directly
+    if (found == null) {
+      final all = await _db.getProducts(_shopId);
+      final matches = all.where((p) => p.barcode == barcode);
+      found = matches.isEmpty ? null : matches.first;
+    }
+
+    if (found != null) {
+      _addToCart(found);
+      HapticFeedback.heavyImpact();
+      SystemSound.play(SystemSoundType.click);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added "${found.name}" to cart'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 1),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No product found with this barcode'),
+          backgroundColor: AppTheme.warning,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
+  void _openScannerSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateSB) => _ScannerCartSheet(
+          cart: _cart,
+          totalAmount: totalAmount,
+          totalItems: totalItems,
+          onScanned: (barcode) async {
+            await _lookupAndAddBarcode(barcode);
+            setStateSB(() {});
+          },
+          onUpdateQuantity: (key, qty) {
+            _updateQuantity(key, qty);
+            setStateSB(() {});
+          },
+          onRemove: (key) {
+            _removeFromCart(key);
+            setStateSB(() {});
+          },
+          onPay: () {
+            Navigator.pop(ctx);
+            _handlePayment();
+          },
+          formatPrice: (price) => 'Rs. ${NumberFormat('#,###').format(price.toInt())}',
+          formatTotal: (price) => 'Rs. ${NumberFormat('#,###.00').format(price)}',
+        ),
+      ),
+    );
   }
 
   @override
@@ -365,7 +392,7 @@ class _SalesScreenState extends State<SalesScreen> {
                             child: Icon(LucideIcons.search, size: 20, color: AppTheme.textTertiary),
                           ),
                           suffixIcon: GestureDetector(
-                            onTap: _scanAndAddToCart,
+                            onTap: _openScannerSheet,
                             child: Container(
                               margin: const EdgeInsets.all(4),
                               decoration: BoxDecoration(color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(12)),
@@ -644,5 +671,331 @@ class _QuantityButton extends StatelessWidget {
         child: Center(child: Text(label, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: filled ? Colors.white : AppTheme.textPrimary))),
       ),
     );
+  }
+}
+
+// ─── Inline Scanner + Cart Sheet ────────────────────────────────────────
+class _ScannerCartSheet extends StatefulWidget {
+  final Map<String, _CartEntry> cart;
+  final double totalAmount;
+  final int totalItems;
+  final Future<void> Function(String barcode) onScanned;
+  final void Function(String key, int qty) onUpdateQuantity;
+  final void Function(String key) onRemove;
+  final VoidCallback onPay;
+  final String Function(double) formatPrice;
+  final String Function(double) formatTotal;
+
+  const _ScannerCartSheet({
+    required this.cart,
+    required this.totalAmount,
+    required this.totalItems,
+    required this.onScanned,
+    required this.onUpdateQuantity,
+    required this.onRemove,
+    required this.onPay,
+    required this.formatPrice,
+    required this.formatTotal,
+  });
+
+  @override
+  State<_ScannerCartSheet> createState() => _ScannerCartSheetState();
+}
+
+class _ScannerCartSheetState extends State<_ScannerCartSheet> {
+  final MobileScannerController _scannerCtrl = MobileScannerController(
+    detectionSpeed: DetectionSpeed.normal,
+    facing: CameraFacing.back,
+    torchEnabled: false,
+  );
+  bool _torchOn = false;
+  String? _lastScanned;
+  DateTime _lastScanTime = DateTime(2000);
+
+  @override
+  void dispose() {
+    _scannerCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    final barcode = capture.barcodes.firstOrNull?.rawValue;
+    if (barcode == null || barcode.isEmpty) return;
+
+    // Debounce: ignore same barcode within 2.5 seconds
+    final now = DateTime.now();
+    if (barcode == _lastScanned && now.difference(_lastScanTime).inMilliseconds < 2500) return;
+
+    _lastScanned = barcode;
+    _lastScanTime = now;
+    widget.onScanned(barcode);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+    final screenH = MediaQuery.of(context).size.height;
+
+    return Container(
+      height: screenH * 0.85,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // ── Drag handle ──
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 8),
+            child: Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.borderMedium, borderRadius: BorderRadius.circular(2)))),
+          ),
+
+          // ── Scanner area ──
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            height: 220,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3), width: 2),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              children: [
+                // Camera preview
+                MobileScanner(
+                  controller: _scannerCtrl,
+                  onDetect: _onDetect,
+                ),
+                // Scan overlay
+                Center(
+                  child: Container(
+                    width: 200, height: 200,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+                    ),
+                  ),
+                ),
+                // Corner accents
+                ..._buildCornerAccents(),
+                // Scan line animation
+                Center(
+                  child: Container(
+                    width: 180, height: 2,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.transparent, AppTheme.primaryColor.withOpacity(0.8), Colors.transparent],
+                      ),
+                    ),
+                  ),
+                ),
+                // Top bar with controls
+                Positioned(
+                  top: 0, left: 0, right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                        colors: [Colors.black.withOpacity(0.5), Colors.transparent],
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(LucideIcons.scan, size: 16, color: Colors.white),
+                            const SizedBox(width: 6),
+                            Text('Scan Products', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white)),
+                          ],
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            _scannerCtrl.toggleTorch();
+                            setState(() => _torchOn = !_torchOn);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: _torchOn ? AppTheme.primaryColor : Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(_torchOn ? LucideIcons.zapOff : LucideIcons.zap, size: 16, color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Bottom hint
+                Positioned(
+                  bottom: 0, left: 0, right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                        colors: [Colors.black.withOpacity(0.5), Colors.transparent],
+                      ),
+                    ),
+                    child: Center(
+                      child: Text('Point camera at barcode', style: GoogleFonts.inter(fontSize: 11, color: Colors.white70)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ── Cart header ──
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.shoppingCart, size: 18, color: AppTheme.primaryColor),
+                const SizedBox(width: 8),
+                Text('Cart (${widget.totalItems} items)', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Text(widget.formatTotal(widget.totalAmount), style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.primaryColor)),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+          const Divider(height: 1),
+
+          // ── Cart items ──
+          Expanded(
+            child: widget.cart.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(LucideIcons.shoppingCart, size: 40, color: AppTheme.textTertiary.withOpacity(0.4)),
+                        const SizedBox(height: 8),
+                        Text('Scan a product to add it here', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textTertiary)),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: widget.cart.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    itemBuilder: (context, index) {
+                      final entry = widget.cart.entries.elementAt(index);
+                      final e = entry.value;
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: const Color(0xFFF9FAFB), borderRadius: BorderRadius.circular(12)),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(e.product.name, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  if (e.selectedVariant != null)
+                                    Text('Variant: ${e.selectedVariant}', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.info)),
+                                  Text(widget.formatPrice(e.product.retailPrice), style: GoogleFonts.inter(fontSize: 13, color: AppTheme.primaryColor, fontWeight: FontWeight.w500)),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                _QuantityButton(label: '-', onTap: () => widget.onUpdateQuantity(entry.key, e.quantity - 1), filled: false),
+                                SizedBox(width: 28, child: Center(child: Text('${e.quantity}', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500)))),
+                                _QuantityButton(label: '+', onTap: () => widget.onUpdateQuantity(entry.key, e.quantity + 1), filled: true),
+                              ],
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () => widget.onRemove(entry.key),
+                              child: const SizedBox(width: 28, height: 28, child: Icon(LucideIcons.trash2, size: 16, color: AppTheme.error)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+
+          // ── Pay button ──
+          Container(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + bottomPad),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: AppTheme.borderLight)),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -2))],
+            ),
+            child: SizedBox(
+              width: double.infinity, height: 52,
+              child: ElevatedButton.icon(
+                onPressed: widget.cart.isEmpty ? null : widget.onPay,
+                icon: const Icon(LucideIcons.printer, size: 20),
+                label: Text(
+                  widget.cart.isEmpty ? 'Scan to add items' : 'Pay ${widget.formatTotal(widget.totalAmount)}',
+                  style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: AppTheme.borderMedium,
+                  disabledForegroundColor: AppTheme.textTertiary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildCornerAccents() {
+    const size = 24.0;
+    const thickness = 3.0;
+    const color = AppTheme.primaryColor;
+    const offset = 24.0;
+
+    Widget corner({
+      required AlignmentGeometry alignment,
+      required BorderRadius borderRadius,
+    }) {
+      return Align(
+        alignment: alignment,
+        child: Container(
+          margin: const EdgeInsets.all(offset),
+          width: size, height: size,
+          decoration: BoxDecoration(
+            borderRadius: borderRadius,
+            border: Border(
+              top: alignment == Alignment.topLeft || alignment == Alignment.topRight
+                  ? const BorderSide(color: color, width: thickness)
+                  : BorderSide.none,
+              bottom: alignment == Alignment.bottomLeft || alignment == Alignment.bottomRight
+                  ? const BorderSide(color: color, width: thickness)
+                  : BorderSide.none,
+              left: alignment == Alignment.topLeft || alignment == Alignment.bottomLeft
+                  ? const BorderSide(color: color, width: thickness)
+                  : BorderSide.none,
+              right: alignment == Alignment.topRight || alignment == Alignment.bottomRight
+                  ? const BorderSide(color: color, width: thickness)
+                  : BorderSide.none,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return [
+      corner(alignment: Alignment.topLeft, borderRadius: const BorderRadius.only(topLeft: Radius.circular(8))),
+      corner(alignment: Alignment.topRight, borderRadius: const BorderRadius.only(topRight: Radius.circular(8))),
+      corner(alignment: Alignment.bottomLeft, borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(8))),
+      corner(alignment: Alignment.bottomRight, borderRadius: const BorderRadius.only(bottomRight: Radius.circular(8))),
+    ];
   }
 }
