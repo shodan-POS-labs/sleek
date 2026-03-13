@@ -8,6 +8,7 @@ import 'core/theme/app_theme.dart';
 import 'core/routes/app_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'services/firestore_service.dart';
+import 'services/auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,9 +32,19 @@ void main() async {
     statusBarIconBrightness: Brightness.light,
   ));
 
-  final firestoreService = FirestoreService();
-  final hasShop = await firestoreService.hasShop();
-  final initialRoute = hasShop ? '/login' : '/shop-setup';
+  final authService = AuthService();
+  final isFirstTime = await authService.isFirstTimeOpening();
+  final isPinSet = await authService.isPinSetForDevice();
+  final hasBiometricsSession = await authService.hasValidSessionForBiometrics();
+
+  String initialRoute;
+  if (isFirstTime) {
+    initialRoute = '/shop-setup';
+  } else if (isPinSet || hasBiometricsSession) {
+    initialRoute = '/login';
+  } else {
+    initialRoute = '/login?mode=email';
+  }
 
   runApp(SleekApp(initialRoute: initialRoute));
 }

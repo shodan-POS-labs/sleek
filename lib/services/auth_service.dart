@@ -22,6 +22,26 @@ class AuthService {
   AppUser? _currentUser;
   AppUser? get currentUser => _currentUser;
 
+  // ── Device-Specific Flags ────────────────────────────────────────────────
+  Future<bool> isFirstTimeOpening() async {
+    final val = await _storage.read(key: 'is_first_time');
+    return val == null || val == 'true';
+  }
+
+  Future<void> setFirstTimeOpening(bool isFirstTime) async {
+    await _storage.write(key: 'is_first_time', value: isFirstTime.toString());
+  }
+
+  Future<bool> isPinSetForDevice() async {
+    final val = await _storage.read(key: 'is_pin_set');
+    return val == 'true';
+  }
+
+  Future<void> setPinSetForDevice(bool isSet) async {
+    await _storage.write(key: 'is_pin_set', value: isSet.toString());
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Hashes the 6-digit PIN before saving/comparing
   String _hashPin(String pin) {
     if (pin.isEmpty) return '';
@@ -69,6 +89,8 @@ class AuthService {
     await _updateEmailLoginSession(uid);
     _currentUser = appUser;
     
+    await setFirstTimeOpening(false);
+    
     return appUser;
   }
 
@@ -91,6 +113,8 @@ class AuthService {
       createdAt: _currentUser!.createdAt,
       biometricEnabled: _currentUser!.biometricEnabled,
     );
+    
+    await setPinSetForDevice(true);
   }
 
   // Add Cashier using secondary Firebase App to prevent signing out Admin
@@ -153,6 +177,9 @@ class AuthService {
     
     await _updateEmailLoginSession(uid);
     _currentUser = user;
+    
+    await setFirstTimeOpening(false);
+    
     return user;
   }
 
@@ -323,6 +350,7 @@ class AuthService {
     if (pin != null && pin.isNotEmpty && pin.length == 6) {
       currentPinHash = _hashPin(pin);
       updates['pinHash'] = currentPinHash;
+      await setPinSetForDevice(true);
     }
 
     await _firestore.collection('users').doc(_currentUser!.uid).update(updates);
