@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -6,6 +6,8 @@ import '../core/theme/app_theme.dart';
 import '../widgets/bottom_nav.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import '../services/premium_service.dart';
+import '../screens/premium_paywall_screen.dart';
 import '../models/app_user.dart';
 import '../models/business_config.dart';
 import '../utils/error_helpers.dart';
@@ -181,10 +183,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   } else if (item['action'] == 'profile_settings') {
                                     _showProfileSettingsDialog(context);
                                   } else if (item['action'] == 'receipt_settings') {
+                                    if (!PremiumService().isPremium) {
+                                      Navigator.push(context, MaterialPageRoute(builder: (ctx) => const PremiumPaywallScreen()));
+                                      return;
+                                    }
                                     context.push('/receipt-settings');
                                   } else if (item['action'] == 'saved_receipts') {
                                     context.push('/saved-receipts');
                                   } else if (item['action'] == 'printer_settings') {
+                                    if (!PremiumService().isPremium) {
+                                      Navigator.push(context, MaterialPageRoute(builder: (ctx) => const PremiumPaywallScreen()));
+                                      return;
+                                    }
                                     _showPrinterSettingsDialog(context);
                                   } else if (item['action'] == 'privacy_policy') {
                                     _showPrivacyPolicyDialog(context);

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,8 +6,8 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'core/theme/app_theme.dart';
 import 'core/routes/app_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'services/firestore_service.dart';
 import 'services/auth_service.dart';
+import 'services/premium_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +35,13 @@ void main() async {
   final isFirstTime = await authService.isFirstTimeOpening();
   final isPinSet = await authService.isPinSetForDevice();
   final hasBiometricsSession = await authService.hasValidSessionForBiometrics();
+
+  // Initialize Premium state safely
+  try {
+    await PremiumService().init();
+  } catch (e, stack) {
+    debugPrint('PremiumService Init Error: $e\n$stack');
+  }
 
   String initialRoute;
   if (isFirstTime) {

@@ -15,6 +15,8 @@ import '../services/report_export_service.dart';
 import '../models/sale.dart';
 import '../models/product.dart';
 import '../models/business_config.dart';
+import '../services/premium_service.dart';
+import '../screens/premium_paywall_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -251,6 +253,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isPremium = PremiumService().isPremium;
     final maxSales = _chartData.isEmpty ? 1.0 : _chartData.map((e) => e['sales'] as double).reduce((a, b) => a > b ? a : b);
     final chartInterval = maxSales > 0 ? (maxSales / 4).ceilToDouble() : 10000.0;
 
@@ -287,7 +290,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
-                        onTap: () => _showDownloadSheet(context),
+                        onTap: () {
+                          if (isPremium) {
+                            _showDownloadSheet(context);
+                          } else {
+                            Navigator.push(context, MaterialPageRoute(builder: (ctx) => const PremiumPaywallScreen())).then((_) => setState((){}));
+                          }
+                        },
                         child: const Icon(LucideIcons.download, size: 22, color: Colors.white),
                       ),
                     ),
@@ -308,12 +317,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
           // ── Content ──
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-                : RefreshIndicator(
-                    onRefresh: _loadData,
-                    color: AppTheme.primaryColor,
-                    child: SingleChildScrollView(
+            child: !isPremium
+                ? _buildPremiumOverlay()
+                : _loading
+                    ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+                    : RefreshIndicator(
+                        onRefresh: _loadData,
+                        color: AppTheme.primaryColor,
+                        child: SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.all(16),
                       child: Column(
@@ -1119,6 +1130,49 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (s.isEmpty) return s;
     return s.split('-').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join('-');
   }
+  // ═══════════════════════════════════════════════════════════
+  // PREMIUM OVERLAY
+  // ═══════════════════════════════════════════════════════════
+
+  Widget _buildPremiumOverlay() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(LucideIcons.lock, size: 64, color: AppTheme.textTertiary),
+            const SizedBox(height: 24),
+            Text(
+              'Advanced Analytics Locked',
+              style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Upgrade to Premium to view detailed sales trends, revenue breakdowns, and business insights.',
+              style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary, height: 1.5),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (ctx) => const PremiumPaywallScreen())).then((_) {
+                  setState((){});
+                });
+              },
+              child: Text('Unlock Premium', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1176,6 +1230,7 @@ class _SummaryCard extends StatelessWidget {
       ),
     );
   }
+
 }
 
 class _ProfitRow extends StatelessWidget {
