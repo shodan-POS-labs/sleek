@@ -7,46 +7,75 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'core/theme/app_theme.dart';
 import 'core/routes/app_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'services/firestore_service.dart';
 import 'services/auth_service.dart';
+import 'firebase_options.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
-  await Firebase.initializeApp();
+    // Initialize Firebase
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      }
 
-  // Initialize Crashlytics
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
+      // Initialize Crashlytics only if supported (Crashlytics not supported on web)
+      if (!kIsWeb) {
+        FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+      }
+    } catch (e) {
+      debugPrint("Firebase initialization failed: $e");
+    }
 
-  // Enable Firestore offline persistence
-  FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: true);
+    // Enable Firestore offline persistence
+    try {
+      if (kIsWeb) {
+        // For Web, persistence is enabled differently or handled by SDK
+        await FirebaseFirestore.instance.enablePersistence();
+      } else {
+        FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: true);
+      }
+    } catch (e) {
+      debugPrint("Firestore persistence setup failed: $e");
+    }
 
-  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-  ));
+    if (!kIsWeb) {
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+      ));
+    }
 
-  final authService = AuthService();
-  final isFirstTime = await authService.isFirstTimeOpening();
-  final isPinSet = await authService.isPinSetForDevice();
-  final hasBiometricsSession = await authService.hasValidSessionForBiometrics();
+    final authService = AuthService();
+    
+    String initialRoute = '/login';
+    try {
+      final isFirstTime = await authService.isFirstTimeOpening();
+      final isPinSet = await authService.isPinSetForDevice();
+      final hasBiometricsSession = await authService.hasValidSessionForBiometrics();
 
-  String initialRoute;
-  if (isFirstTime) {
-    initialRoute = '/shop-setup';
-  } else if (isPinSet || hasBiometricsSession) {
-    initialRoute = '/login';
-  } else {
-    initialRoute = '/login?mode=email';
-  }
+      if (isFirstTime) {
+        initialRoute = '/shop-setup';
+      } else if (isPinSet || hasBiometricsSession) {
+        initialRoute = '/login';
+      } else {
+        initialRoute = '/login?mode=email';
+      }
+    } catch (e) {
+      debugPrint("Initial route determination failed: $e");
+    }
 
-  runApp(SleekApp(initialRoute: initialRoute));
+    runApp(SleekApp(initialRoute: initialRoute));
+  }, (error, stack) {
+    debugPrint("Uncaught error: $error");
+    if (!kIsWeb) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    }
+  });
 }
 
 class SleekApp extends StatelessWidget {
