@@ -14,6 +14,7 @@ import '../models/product.dart';
 import '../models/sale.dart';
 import '../models/business_config.dart';
 import '../models/receipt_settings.dart';
+import '../widgets/app_modals.dart';
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -43,28 +44,75 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Future<void> _loadProducts() async {
-    final config = await _db.getBusinessConfig(_shopId);
-    final products = await _db.getProducts(_shopId, search: _searchQuery.isEmpty ? null : _searchQuery);
-    if (mounted) setState(() { _config = config; _products = products; _loading = false; });
+    try {
+      final config = await _db.getBusinessConfig(_shopId);
+      final products = await _db.getProducts(_shopId, search: _searchQuery.isEmpty ? null : _searchQuery);
+      if (mounted) setState(() { _config = config; _products = products; _loading = false; });
+    } catch (e) {
+      debugPrint("Error loading products for sale: $e");
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   double get totalAmount {
     return _cart.values.fold(0.0, (sum, e) {
       final modPrice = e.selectedModifiers.fold(0.0, (s, m) => s + ((m['price'] as num?)?.toDouble() ?? 0));
-      return sum + (e.product.retailPrice + e.variantPriceAdjustment + modPrice) * e.quantity;
+      double multiplier = e.product.isWeighable ? (e.quantity / (e.product.weightQuantity > 0 ? e.product.weightQuantity : 1.0)) : e.quantity;
+      return sum + (e.product.retailPrice + e.variantPriceAdjustment + modPrice) * multiplier;
     });
   }
-  int get totalItems => _cart.values.fold(0, (sum, e) => sum + e.quantity);
+  int get totalItems => _cart.values.fold(0, (sum, e) => sum + (e.product.isWeighable ? 1 : e.quantity.toInt()));
 
-  void _addToCart(Product product, {List<Map<String, dynamic>> modifiers = const [], String? variant, double variantPrice = 0}) {
+  Future<void> _addToCart(Product product, {List<Map<String, dynamic>> modifiers = const [], String? variant, double variantPrice = 0}) async {
+    if (product.isWeighable) {
+      final weightCtrl = TextEditingController();
+      final weight = await AppModals.showAppDialog<double>(
+        context: context,
+        title: 'Enter amount (${product.unitType})',
+        child: TextField(
+          controller: weightCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'e.g. 1.5 or 250',
+          ),
+        ),
+        primaryAction: ElevatedButton(
+          onPressed: () => Navigator.pop(context, double.tryParse(weightCtrl.text)),
+          child: const Text('Add to Cart'),
+        ),
+        secondaryAction: TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      );
+      if (weight != null && weight > 0) {
+        _executeAddToCart(product, modifiers: modifiers, variant: variant, variantPrice: variantPrice, quantity: weight);
+      }
+    } else {
+      _executeAddToCart(product, modifiers: modifiers, variant: variant, variantPrice: variantPrice, quantity: 1.0);
+    }
+  }
+
+  void _executeAddToCart(Product product, {List<Map<String, dynamic>> modifiers = const [], String? variant, double variantPrice = 0, required double quantity}) {
+    final key = '${product.id}_${variant ?? ''}_${modifiers.map((m) => m['name']).join(',')}';
+    double currentQty = 0;
+    if (_cart.containsKey(key)) {
+      currentQty = _cart[key]!.quantity;
+    }
+
+    if ((currentQty + quantity) > product.stock && _config.hasStockManagement) {
+      _showStockWarning(product.stock);
+      return;
+    }
+
     setState(() {
-      final key = '${product.id}_${variant ?? ''}_${modifiers.map((m) => m['name']).join(',')}';
       if (_cart.containsKey(key)) {
-        _cart[key]!.quantity++;
+        _cart[key]!.quantity += quantity;
       } else {
         _cart[key] = _CartEntry(
           product: product,
-          quantity: 1,
+          quantity: quantity,
           selectedModifiers: modifiers,
           selectedVariant: variant,
           variantPriceAdjustment: variantPrice,
@@ -179,7 +227,15 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  void _updateQuantity(String productId, int quantity) {
+  void _updateQuantity(String productId, double quantity) {
+    if (!_cart.containsKey(productId)) return;
+    final entry = _cart[productId]!;
+
+    if (quantity > entry.product.stock && _config.hasStockManagement) {
+      _showStockWarning(entry.product.stock);
+      return;
+    }
+
     setState(() {
       if (quantity <= 0) {
         _removeFromCart(productId);
@@ -187,6 +243,18 @@ class _SalesScreenState extends State<SalesScreen> {
         _cart[productId]?.quantity = quantity;
       }
     });
+  }
+
+  void _showStockWarning(num max) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Cannot exceed available stock ($max)'),
+        backgroundColor: AppTheme.error,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   Future<void> _handlePayment() async {
@@ -287,11 +355,9 @@ class _SalesScreenState extends State<SalesScreen> {
       found = null;
     }
 
-    // If not found in loaded list, query Firestore directly
+    // If not found in loaded list, query Firestore directly for this specific barcode
     if (found == null) {
-      final all = await _db.getProducts(_shopId);
-      final matches = all.where((p) => p.barcode == barcode);
-      found = matches.isEmpty ? null : matches.first;
+      found = await _db.getProductByBarcode(_shopId, barcode);
     }
 
     if (found != null) {
@@ -322,12 +388,11 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _openScannerSheet() {
-    showModalBottomSheet(
+    AppModals.showAppBottomSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateSB) => _ScannerCartSheet(
+      title: 'Scan & Checkout',
+      child: StatefulBuilder(
+        builder: (ctx, setStateSB) => _ScannerCartSheet(
           cart: _cart,
           totalAmount: totalAmount,
           totalItems: totalItems,
@@ -444,7 +509,12 @@ class _SalesScreenState extends State<SalesScreen> {
                                           const SizedBox(height: 4),
                                           Text('Rs. ${NumberFormat('#,###').format(product.retailPrice.toInt())}', style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600, color: AppTheme.primaryColor)),
                                           if (_config.hasStockManagement)
-                                            Text('Stock: ${product.stock}', style: GoogleFonts.inter(fontSize: 12, color: product.stock < 30 ? AppTheme.warning : AppTheme.textSecondary)),
+                                            Text(
+                                              product.isWeighable 
+                                                ? 'Stock: ${product.stock} ${product.unitType}' 
+                                                : 'Stock: ${product.stock.toInt()}', 
+                                              style: GoogleFonts.inter(fontSize: 12, color: product.stock < 30 ? AppTheme.warning : AppTheme.textSecondary)
+                                            ),
                                           if (_config.hasModifiers && product.modifiers.isNotEmpty)
                                             Text('${product.modifiers.length} add-ons available', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.info)),
                                         ],
@@ -541,9 +611,48 @@ class _SalesScreenState extends State<SalesScreen> {
                                 ),
                                 Row(
                                   children: [
-                                    _QuantityButton(label: '-', onTap: () => _updateQuantity(entry.key, e.quantity - 1), filled: false),
-                                    SizedBox(width: 32, child: Center(child: Text('${e.quantity}', style: GoogleFonts.inter(fontSize: 14)))),
-                                    _QuantityButton(label: '+', onTap: () => _updateQuantity(entry.key, e.quantity + 1), filled: true),
+                                    if (e.product.isWeighable) ...[
+                                      Text('${e.quantity} ${e.product.unitType}', style: GoogleFonts.inter(fontSize: 14)),
+                                      IconButton(
+                                        icon: const Icon(LucideIcons.edit2, size: 16, color: AppTheme.primaryColor),
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        constraints: const BoxConstraints(),
+                                        onPressed: () async {
+                                          final weightCtrl = TextEditingController(text: e.quantity.toString());
+                                          final weight = await AppModals.showAppDialog<double>(
+                                            context: context,
+                                            title: 'Edit amount (${e.product.unitType})',
+                                            child: TextField(
+                                              controller: weightCtrl,
+                                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                              autofocus: true,
+                                              decoration: InputDecoration(
+                                                filled: true,
+                                                fillColor: const Color(0xFFF9FAFB),
+                                                border: OutlineInputBorder(
+                                                    borderRadius: BorderRadius.circular(12),
+                                                    borderSide: BorderSide.none),
+                                              ),
+                                            ),
+                                            primaryAction: ElevatedButton(
+                                              onPressed: () => Navigator.pop(context, double.tryParse(weightCtrl.text)),
+                                              child: const Text('Save Changes'),
+                                            ),
+                                            secondaryAction: TextButton(
+                                              onPressed: () => Navigator.pop(context),
+                                              child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+                                            ),
+                                          );
+                                          if (weight != null && weight > 0) {
+                                            _updateQuantity(entry.key, weight);
+                                          }
+                                        }
+                                      ),
+                                    ] else ...[
+                                      _QuantityButton(label: '-', onTap: () => _updateQuantity(entry.key, e.quantity - 1), filled: false),
+                                      SizedBox(width: 32, child: Center(child: Text('${e.quantity.toInt()}', style: GoogleFonts.inter(fontSize: 14)))),
+                                      _QuantityButton(label: '+', onTap: () => _updateQuantity(entry.key, e.quantity + 1), filled: true),
+                                    ],
                                   ],
                                 ),
                                 const SizedBox(width: 8),
@@ -637,7 +746,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
 class _CartEntry {
   final Product product;
-  int quantity;
+  double quantity;
   final List<Map<String, dynamic>> selectedModifiers;
   final String? selectedVariant;
   final double variantPriceAdjustment;
@@ -680,7 +789,7 @@ class _ScannerCartSheet extends StatefulWidget {
   final double totalAmount;
   final int totalItems;
   final Future<void> Function(String barcode) onScanned;
-  final void Function(String key, int qty) onUpdateQuantity;
+  final void Function(String key, double qty) onUpdateQuantity;
   final void Function(String key) onRemove;
   final VoidCallback onPay;
   final String Function(double) formatPrice;
@@ -905,9 +1014,48 @@ class _ScannerCartSheetState extends State<_ScannerCartSheet> {
                             ),
                             Row(
                               children: [
-                                _QuantityButton(label: '-', onTap: () => widget.onUpdateQuantity(entry.key, e.quantity - 1), filled: false),
-                                SizedBox(width: 28, child: Center(child: Text('${e.quantity}', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500)))),
-                                _QuantityButton(label: '+', onTap: () => widget.onUpdateQuantity(entry.key, e.quantity + 1), filled: true),
+                                if (e.product.isWeighable) ...[
+                                  Text('${e.quantity} ${e.product.unitType}', style: GoogleFonts.inter(fontSize: 13)),
+                                  IconButton(
+                                    icon: const Icon(LucideIcons.edit2, size: 14, color: AppTheme.primaryColor),
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () async {
+                                      final weightCtrl = TextEditingController(text: e.quantity.toString());
+                                      final weight = await AppModals.showAppDialog<double>(
+                                        context: context,
+                                        title: 'Edit amount (${e.product.unitType})',
+                                        child: TextField(
+                                          controller: weightCtrl,
+                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          autofocus: true,
+                                          decoration: InputDecoration(
+                                            filled: true,
+                                            fillColor: const Color(0xFFF9FAFB),
+                                            border: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: BorderSide.none),
+                                          ),
+                                        ),
+                                        primaryAction: ElevatedButton(
+                                          onPressed: () => Navigator.pop(context, double.tryParse(weightCtrl.text)),
+                                          child: const Text('Save Changes'),
+                                        ),
+                                        secondaryAction: TextButton(
+                                          onPressed: () => Navigator.pop(context),
+                                          child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+                                        ),
+                                      );
+                                      if (weight != null && weight > 0) {
+                                        widget.onUpdateQuantity(entry.key, weight);
+                                      }
+                                    }
+                                  ),
+                                ] else ...[
+                                  _QuantityButton(label: '-', onTap: () => widget.onUpdateQuantity(entry.key, e.quantity - 1), filled: false),
+                                  SizedBox(width: 28, child: Center(child: Text('${e.quantity.toInt()}', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500)))),
+                                  _QuantityButton(label: '+', onTap: () => widget.onUpdateQuantity(entry.key, e.quantity + 1), filled: true),
+                                ],
                               ],
                             ),
                             const SizedBox(width: 6),

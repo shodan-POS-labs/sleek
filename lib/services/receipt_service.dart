@@ -12,6 +12,8 @@ import 'package:blue_thermal_printer/blue_thermal_printer.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import '../models/receipt_settings.dart';
 import '../models/sale.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 
 /// ReceiptService
 ///
@@ -208,6 +210,28 @@ class ReceiptService {
     }
 
     return savedFile;
+  }
+
+  /// Re-print an existing sale.
+  Future<void> reprintSale({
+    required BuildContext context,
+    required Sale sale,
+    required List<SaleItem> items,
+    required String shopId,
+  }) async {
+    final auth = AuthService();
+    final db = FirestoreService();
+    final shopDetails = await db.getShopDetails(shopId) ?? {};
+    final settings = await db.getReceiptSettings(shopId);
+    
+    await printReceipt(
+      context: context,
+      sale: sale,
+      items: items,
+      settings: settings,
+      shopDetails: shopDetails,
+      cashierName: auth.currentUser?.name,
+    );
   }
 
   /// Share a saved receipt file.

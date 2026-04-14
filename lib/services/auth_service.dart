@@ -196,25 +196,28 @@ class AuthService {
   // Login using 6-digit PIN
   Future<AppUser?> loginWithPIN(String pin) async {
     final hashedPin = _hashPin(pin);
+    final savedUid = await _storage.read(key: 'last_uid');
+    
+    if (savedUid == null) {
+      throw Exception("No user found on this device. Please log in with email first.");
+    }
     
     try {
-      // Find the user with this PIN hash
-      final snapshot = await _firestore
-          .collection('users')
-          .where('pinHash', isEqualTo: hashedPin)
-          .limit(1)
-          .get();
+      // Find the specific user with this UID and verify their PIN hash
+      final doc = await _firestore.collection('users').doc(savedUid).get();
 
-      if (snapshot.docs.isNotEmpty) {
-        final doc = snapshot.docs.first;
-        final user = AppUser.fromMap(doc.data(), doc.id);
-        
-        // Check 30-day session expiry
-        await _validate30DaySession(user.uid);
+      if (doc.exists) {
+        final data = doc.data()!;
+        if (data['pinHash'] == hashedPin) {
+          final user = AppUser.fromMap(data, doc.id);
+          
+          // Check 30-day session expiry
+          await _validate30DaySession(user.uid);
 
-        await _storage.write(key: 'session_uid', value: user.uid);
-        _currentUser = user;
-        return user;
+          await _storage.write(key: 'session_uid', value: user.uid);
+          _currentUser = user;
+          return user;
+        }
       }
     } catch (e) {
       if (e is StateError) {
@@ -228,8 +231,14 @@ class AuthService {
   // Validate if the user has logged in with Email/Password within the last 30 days
   Future<void> _validate30DaySession(String uid) async {
     final lastLoginStr = await _storage.read(key: '${uid}_last_email_login');
+    
     if (lastLoginStr == null) {
-      throw StateError('Session expired. Please log in with your email and password.');
+      // Migration path: Initialize session on first successful PIN login after update
+      await _storage.write(
+        key: '${uid}_last_email_login', 
+        value: DateTime.now().toIso8601String()
+      );
+      return;
     }
 
     final lastLogin = DateTime.parse(lastLoginStr);

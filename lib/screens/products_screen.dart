@@ -11,6 +11,7 @@ import '../services/auth_service.dart';
 import '../models/product.dart';
 import '../models/app_user.dart';
 import '../models/business_config.dart';
+import '../widgets/app_modals.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -38,10 +39,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   Future<void> _loadData() async {
-    final config = await _db.getBusinessConfig(_shopId);
-    final products = await _db.getProducts(_shopId, search: _searchQuery.isEmpty ? null : _searchQuery);
-    final categories = await _db.getCategories(_shopId);
-    if (mounted) setState(() { _config = config; _products = products; _categories = categories; _loading = false; });
+    try {
+      final config = await _db.getBusinessConfig(_shopId);
+      final products = await _db.getProducts(_shopId, search: _searchQuery.isEmpty ? null : _searchQuery);
+      final categories = await _db.getCategories(_shopId);
+      if (mounted) setState(() { _config = config; _products = products; _categories = categories; _loading = false; });
+    } catch (e) {
+      debugPrint("Error loading products: $e");
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   void _showProductSheet({Product? existing}) {
@@ -56,16 +62,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
     final deviceInfoCtrl = TextEditingController(text: existing?.deviceInfo ?? '');
     DateTime? selectedExpiry = existing?.expiryDate;
 
-    showModalBottomSheet(
+    AppModals.showAppBottomSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _AddProductSheet(
+      title: isEditing ? 'Edit ${_config.salesItemLabel}' : _config.addItemLabel,
+      child: _AddProductSheet(
         config: _config,
         isEditing: isEditing,
         initialCategory: existing?.category,
         initialModifiers: existing?.modifiers ?? [],
         initialVariants: existing?.variants ?? [],
+        initialIsWeighable: existing?.isWeighable ?? false,
+        initialWeightQuantity: existing?.weightQuantity ?? 1.0,
+        initialUnitType: existing?.unitType,
         initialExpiry: selectedExpiry,
         onExpiryChanged: (d) => selectedExpiry = d,
         nameCtrl: nameCtrl,
@@ -77,7 +85,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
         serviceChargeCtrl: serviceChargeCtrl,
         deviceInfoCtrl: deviceInfoCtrl,
         categories: _categories,
-        onSubmit: (category, modifiers, variants) async {
+        onSubmit: (category, modifiers, variants, isWeighable, weightQuantity, unitType) async {
           if (nameCtrl.text.isEmpty) return;
           final product = Product(
             id: existing?.id,
@@ -85,7 +93,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
             barcode: barcodeCtrl.text,
             retailPrice: double.tryParse(retailCtrl.text) ?? 0,
             wholesalePrice: double.tryParse(wholesaleCtrl.text) ?? 0,
-            stock: int.tryParse(stockCtrl.text) ?? 0,
+            stock: double.tryParse(stockCtrl.text) ?? 0,
             category: category ?? 'General',
             batchNumber: batchCtrl.text.isEmpty ? null : batchCtrl.text,
             serviceCharge: double.tryParse(serviceChargeCtrl.text) ?? 0,
@@ -93,42 +101,48 @@ class _ProductsScreenState extends State<ProductsScreen> {
             expiryDate: selectedExpiry,
             modifiers: modifiers,
             variants: variants,
+            isWeighable: isWeighable,
+            weightQuantity: weightQuantity,
+            unitType: unitType,
           );
           if (isEditing) {
             await _db.updateProduct(_shopId, product);
           } else {
             await _db.insertProduct(_shopId, product);
           }
-          if (!ctx.mounted) return;
-          Navigator.of(ctx).pop();
-          _loadData();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(isEditing ? '${_config.salesItemLabel} updated!' : '${_config.salesItemLabel} added successfully!'),
-              backgroundColor: AppTheme.primaryColor,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          );
+          if (context.mounted) {
+            Navigator.of(context).pop();
+            _loadData();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(isEditing
+                    ? '${_config.salesItemLabel} updated!'
+                    : '${_config.salesItemLabel} added successfully!'),
+                backgroundColor: AppTheme.primaryColor,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            );
+          }
         },
       ),
     );
   }
 
   Future<void> _confirmDelete(Product p) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await AppModals.showAppDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Delete ${_config.salesItemLabel}?', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-        content: Text('"${p.name}" will be permanently deleted.', style: GoogleFonts.inter()),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Delete', style: GoogleFonts.inter(color: AppTheme.error, fontWeight: FontWeight.w600)),
-          ),
-        ],
+      title: 'Delete ${_config.salesItemLabel}?',
+      child: Text('"${p.name}" will be permanently deleted.', style: GoogleFonts.inter()),
+      primaryAction: ElevatedButton(
+        onPressed: () => Navigator.pop(context, true),
+        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+        child: const Text('Delete Product'),
+      ),
+      secondaryAction: TextButton(
+        onPressed: () => Navigator.pop(context, false),
+        child: const Text('Cancel'),
       ),
     );
     if (confirmed == true && p.id != null) {
@@ -298,12 +312,15 @@ class _AddProductSheet extends StatefulWidget {
   final TextEditingController nameCtrl, barcodeCtrl, retailCtrl, wholesaleCtrl, stockCtrl;
   final TextEditingController batchCtrl, serviceChargeCtrl, deviceInfoCtrl;
   final List<String> categories;
-  final void Function(String? category, List<Map<String, dynamic>> modifiers, List<Map<String, dynamic>> variants) onSubmit;
+  final void Function(String? category, List<Map<String, dynamic>> modifiers, List<Map<String, dynamic>> variants, bool isWeighable, double weightQuantity, String unitType) onSubmit;
 
   final bool isEditing;
   final String? initialCategory;
   final List<Map<String, dynamic>> initialModifiers;
   final List<Map<String, dynamic>> initialVariants;
+  final bool initialIsWeighable;
+  final double initialWeightQuantity;
+  final String? initialUnitType;
   final DateTime? initialExpiry;
   final ValueChanged<DateTime?>? onExpiryChanged;
 
@@ -313,6 +330,9 @@ class _AddProductSheet extends StatefulWidget {
     this.initialCategory,
     this.initialModifiers = const [],
     this.initialVariants = const [],
+    this.initialIsWeighable = false,
+    this.initialWeightQuantity = 1.0,
+    this.initialUnitType,
     this.initialExpiry,
     this.onExpiryChanged,
     required this.nameCtrl, required this.barcodeCtrl, required this.retailCtrl,
@@ -335,6 +355,11 @@ class _AddProductSheetState extends State<_AddProductSheet> {
   final _modPriceCtrl = TextEditingController();
   final _varLabelCtrl = TextEditingController();
   final _varPriceCtrl = TextEditingController();
+  
+  bool _isWeighable = false;
+  late final TextEditingController _weightQuantityCtrl;
+  late final TextEditingController _unitTypeCtrl;
+
 
   @override
   void initState() {
@@ -343,6 +368,9 @@ class _AddProductSheetState extends State<_AddProductSheet> {
     _selectedExpiry = widget.initialExpiry;
     _modifiers = List<Map<String, dynamic>>.from(widget.initialModifiers);
     _variants = List<Map<String, dynamic>>.from(widget.initialVariants);
+    _isWeighable = widget.initialIsWeighable;
+    _weightQuantityCtrl = TextEditingController(text: widget.initialWeightQuantity.toString());
+    _unitTypeCtrl = TextEditingController(text: widget.initialUnitType ?? 'piece');
     if (widget.initialCategory != null) {
       // If it matches an existing category use dropdown, else use text field
       if (widget.categories.contains(widget.initialCategory)) {
@@ -361,35 +389,11 @@ class _AddProductSheetState extends State<_AddProductSheet> {
   @override
   Widget build(BuildContext context) {
     final c = widget.config;
-    return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
-      decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ── Drag handle (outside scroll so it triggers dismiss) ──
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onVerticalDragUpdate: (details) {
-              if (details.primaryDelta != null && details.primaryDelta! > 10) {
-                Navigator.of(context).pop();
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.only(top: 16, bottom: 8),
-              child: Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.borderMedium, borderRadius: BorderRadius.circular(2)))),
-            ),
-          ),
-          // ── Scrollable form content ──
-          Flexible(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.only(left: 24, right: 24, top: 8, bottom: MediaQuery.of(context).viewInsets.bottom + 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(widget.isEditing ? 'Edit ${c.salesItemLabel}' : c.addItemLabel, style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 20),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 8),
 
             // ── Name (always) ──
             _label('${c.salesItemLabel} Name'),
@@ -443,8 +447,8 @@ class _AddProductSheetState extends State<_AddProductSheet> {
 
             // ── Stock (retail / pharmacy) ──
             if (c.hasStockManagement) ...[
-              _label('Stock Quantity'),
-              _field(widget.stockCtrl, '0', num: true),
+              _label(_isWeighable ? 'Stock Weight' : 'Stock Quantity'),
+              _field(widget.stockCtrl, _isWeighable ? '0.00' : '0', num: true),
               const SizedBox(height: 16),
             ],
 
@@ -585,6 +589,35 @@ class _AddProductSheetState extends State<_AddProductSheet> {
               const SizedBox(height: 16),
             ],
 
+            // ══════════════════════════════════════════════════════
+            // ── WEIGHABLE FIELDS ──
+            // ══════════════════════════════════════════════════════
+            if (widget.config.hasWeightBasedPricing) ...[
+              SwitchListTile(
+                title: Text('Sell by Weight', style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
+                subtitle: Text('Enable if product price is based on weight measured at checkout.', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary)),
+                value: _isWeighable,
+                onChanged: (v) => setState(() => _isWeighable = v),
+                activeColor: AppTheme.primaryColor,
+                contentPadding: EdgeInsets.zero,
+              ),
+              if (_isWeighable) ...[
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    _label('Base Weight'),
+                    _field(_weightQuantityCtrl, 'e.g. 1 or 100', num: true),
+                  ])),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    _label('Unit (e.g. kg, g)'),
+                    _field(_unitTypeCtrl, 'e.g. kg'),
+                  ])),
+                ]),
+                const SizedBox(height: 16),
+              ],
+            ],
+
             // ── Category (combined dropdown + text input) ──
             _label('Category'),
             const SizedBox(height: 4),
@@ -611,21 +644,24 @@ class _AddProductSheetState extends State<_AddProductSheet> {
             const SizedBox(height: 24),
 
             // ── Submit Button ──
+            const SizedBox(height: 8),
             SizedBox(
-              width: double.infinity, height: 48,
+              width: double.infinity, height: 56,
               child: ElevatedButton(
-                onPressed: () => widget.onSubmit(_effectiveCategory, _modifiers, _variants),
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
-                child: Text(widget.isEditing ? 'Save Changes' : c.addItemLabel, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500)),
+                onPressed: () => widget.onSubmit(_effectiveCategory, _modifiers, _variants, _isWeighable, double.tryParse(_weightQuantityCtrl.text) ?? 1.0, _unitTypeCtrl.text.trim().isEmpty ? 'piece' : _unitTypeCtrl.text.trim()),
+                child: Text(widget.isEditing ? 'Save Changes' : c.addItemLabel),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity, height: 56,
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
               ),
             ),
           ],
-        ),
-      ),
-          ),
-        ],
-      ),
-    );
+        );
   }
 
   Widget _label(String text) => Padding(

@@ -8,6 +8,7 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/app_notification.dart';
 import '../utils/error_helpers.dart';
+import '../widgets/app_modals.dart';
 
 class LoginScreen extends StatefulWidget {
   final bool startWithEmail;
@@ -445,75 +446,75 @@ class _LoginScreenState extends State<LoginScreen> {
     final resetEmailCtrl = TextEditingController(text: _emailCtrl.text);
     bool sending = false;
 
-    showDialog(
+    AppModals.showAppDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
+      title: 'Reset Password',
+      child: StatefulBuilder(
         builder: (context, setStateSB) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Row(
-              children: [
-                const Icon(LucideIcons.mailQuestion, color: AppTheme.primaryColor),
-                const SizedBox(width: 8),
-                Text('Reset Password', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18)),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Enter your email address and we\'ll send you a link to reset your password.',
-                  style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: resetEmailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: 'Email Address',
-                    prefixIcon: const Icon(LucideIcons.mail),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              OutlinedButton(
-                onPressed: sending ? null : () => Navigator.pop(ctx),
-                child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter your email address and we\'ll send you a link to reset your password.',
+                style: GoogleFonts.inter(
+                    fontSize: 14, color: AppTheme.textSecondary),
               ),
-              ElevatedButton(
-                onPressed: sending
-                    ? null
-                    : () async {
-                        if (resetEmailCtrl.text.trim().isEmpty) return;
-                        setStateSB(() => sending = true);
-                        try {
-                          await _auth.sendPasswordResetEmail(resetEmailCtrl.text.trim());
-                          if (ctx.mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Password reset email sent! Check your inbox.'), backgroundColor: Colors.green),
-                            );
-                          }
-                        } catch (e) {
-                          setStateSB(() => sending = false);
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error),
-                            );
-                          }
-                        }
-                      },
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white, minimumSize: const Size(0, 48)),
-                child: sending
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Send Reset Link'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: resetEmailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email Address',
+                  prefixIcon: Icon(LucideIcons.mail),
+                ),
               ),
             ],
           );
         },
+      ),
+      primaryAction: StatefulBuilder(
+        builder: (context, setStateSB) => ElevatedButton(
+          onPressed: sending
+              ? null
+              : () async {
+                  if (resetEmailCtrl.text.trim().isEmpty) return;
+                  setStateSB(() => sending = true);
+                  try {
+                    await _auth
+                        .sendPasswordResetEmail(resetEmailCtrl.text.trim());
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text(
+                                'Password reset email sent! Check your inbox.'),
+                            backgroundColor: Colors.green),
+                      );
+                    }
+                  } catch (e) {
+                    setStateSB(() => sending = false);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text(friendlyErrorMessage(e)),
+                            backgroundColor: AppTheme.error),
+                      );
+                    }
+                  }
+                },
+          child: sending
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
+              : const Text('Send Reset Link'),
+        ),
+      ),
+      secondaryAction: TextButton(
+        onPressed: sending ? null : () => Navigator.pop(context),
+        child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
       ),
     );
   }
@@ -521,63 +522,55 @@ class _LoginScreenState extends State<LoginScreen> {
   // ── Forgot PIN Dialog ───────────────────────────────────────────────────
 
   void _showForgotPinDialog() {
-    showDialog(
+    AppModals.showAppDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(LucideIcons.keyRound, color: AppTheme.warning),
-            const SizedBox(width: 8),
-            Text('Forgot PIN?', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Choose how you want to reset your PIN:',
-              style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 20),
-            // Option 1: Admin self-reset
-            _resetOptionTile(
-              icon: LucideIcons.shield,
-              color: AppTheme.primaryColor,
-              title: 'I\'m an Admin',
-              subtitle: 'Log in with email first, then change your PIN in Settings.',
-              onTap: () {
-                Navigator.pop(ctx);
-                setState(() => _requiresEmailLogin = true);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Log in with email, then go to Settings → Profile to reset your PIN.'),
-                    duration: Duration(seconds: 4),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 12),
-            // Option 2: Cashier → notify admin
-            _resetOptionTile(
-              icon: LucideIcons.userCircle,
-              color: AppTheme.warning,
-              title: 'I\'m a Cashier',
-              subtitle: 'Send a request to your admin to reset your PIN.',
-              onTap: () {
-                Navigator.pop(ctx);
-                _showCashierResetRequestDialog();
-              },
-            ),
-          ],
-        ),
-        actions: [
-          OutlinedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+      title: 'Forgot PIN?',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Choose how you want to reset your PIN:',
+            style:
+                GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 20),
+          // Option 1: Admin self-reset
+          _resetOptionTile(
+            icon: LucideIcons.shield,
+            color: AppTheme.primaryColor,
+            title: 'I\'m an Admin',
+            subtitle:
+                'Log in with email first, then change your PIN in Settings.',
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _requiresEmailLogin = true);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                      'Log in with email, then go to Settings → Profile to reset your PIN.'),
+                  duration: Duration(seconds: 4),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          // Option 2: Cashier → notify admin
+          _resetOptionTile(
+            icon: LucideIcons.userCircle,
+            color: AppTheme.warning,
+            title: 'I\'m a Cashier',
+            subtitle: 'Send a request to your admin to reset your PIN.',
+            onTap: () {
+              Navigator.pop(context);
+              _showCashierResetRequestDialog();
+            },
           ),
         ],
+      ),
+      primaryAction: ElevatedButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
       ),
     );
   }
@@ -625,98 +618,103 @@ class _LoginScreenState extends State<LoginScreen> {
     final emailCtrl = TextEditingController();
     bool sending = false;
 
-    showDialog(
+    AppModals.showAppDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
+      title: 'Request PIN Reset',
+      child: StatefulBuilder(
         builder: (context, setStateSB) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text('Request PIN Reset', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Enter your email so we can find your account and notify your admin.',
-                  style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: 'Your Email',
-                    prefixIcon: const Icon(LucideIcons.mail),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              OutlinedButton(
-                onPressed: sending ? null : () => Navigator.pop(ctx),
-                child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter your email so we can find your account and notify your admin.',
+                style: GoogleFonts.inter(
+                    fontSize: 14, color: AppTheme.textSecondary),
               ),
-              ElevatedButton(
-                onPressed: sending
-                    ? null
-                    : () async {
-                        final email = emailCtrl.text.trim();
-                        if (email.isEmpty) return;
-                        setStateSB(() => sending = true);
-                        try {
-                          // Find the cashier by email
-                          final cashier = await _db.queryUserByEmail(email);
-                          if (cashier == null) {
-                            throw Exception('No account found with this email.');
-                          }
-                          // Find admin for the same shop
-                          final admin = await _auth.getShopAdmin(cashier.shopId);
-                          if (admin == null) {
-                            throw Exception('Could not find your shop admin.');
-                          }
-                          // Create notification for admin
-                          await _db.createNotification(
-                            cashier.shopId,
-                            AppNotification(
-                              type: 'pin_reset_request',
-                              title: 'PIN Reset Request',
-                              body: '${cashier.name} ($email) has requested a PIN reset. Go to Settings → Manage Cashiers to reset their PIN.',
-                              createdAt: DateTime.now(),
-                              metadata: {
-                                'requesterUid': cashier.uid,
-                                'requesterName': cashier.name,
-                                'requesterEmail': email,
-                              },
-                            ),
-                          );
-                          if (ctx.mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Reset request sent to your admin. They will set a new PIN for you.'),
-                                backgroundColor: Colors.green,
-                                duration: Duration(seconds: 4),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          setStateSB(() => sending = false);
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error),
-                            );
-                          }
-                        }
-                      },
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warning, foregroundColor: Colors.white, minimumSize: const Size(0, 48)),
-                child: sending
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Send Request'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Your Email',
+                  prefixIcon: Icon(LucideIcons.mail),
+                ),
               ),
             ],
           );
         },
+      ),
+      primaryAction: StatefulBuilder(
+        builder: (context, setStateSB) => ElevatedButton(
+          onPressed: sending
+              ? null
+              : () async {
+                  final email = emailCtrl.text.trim();
+                  if (email.isEmpty) return;
+                  setStateSB(() => sending = true);
+                  try {
+                    // Find the cashier by email
+                    final cashier = await _db.queryUserByEmail(email);
+                    if (cashier == null) {
+                      throw Exception('No account found with this email.');
+                    }
+                    // Find admin for the same shop
+                    final admin = await _auth.getShopAdmin(cashier.shopId);
+                    if (admin == null) {
+                      throw Exception('Could not find your shop admin.');
+                    }
+                    // Create notification for admin
+                    await _db.createNotification(
+                      cashier.shopId,
+                      AppNotification(
+                        type: 'pin_reset_request',
+                        title: 'PIN Reset Request',
+                        body:
+                            '${cashier.name} ($email) has requested a PIN reset. Go to Settings → Manage Cashiers to reset their PIN.',
+                        createdAt: DateTime.now(),
+                        metadata: {
+                          'requesterUid': cashier.uid,
+                          'requesterName': cashier.name,
+                          'requesterEmail': email,
+                        },
+                      ),
+                    );
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              'Reset request sent to your admin. They will set a new PIN for you.'),
+                          backgroundColor: Colors.green,
+                          duration: Duration(seconds: 4),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    setStateSB(() => sending = false);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text(friendlyErrorMessage(e)),
+                            backgroundColor: AppTheme.error),
+                      );
+                    }
+                  }
+                },
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warning),
+          child: sending
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
+              : const Text('Send Request'),
+        ),
+      ),
+      secondaryAction: TextButton(
+        onPressed: sending ? null : () => Navigator.pop(context),
+        child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
       ),
     );
   }

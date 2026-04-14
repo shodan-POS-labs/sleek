@@ -1,9 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../core/theme/app_theme.dart';
 import '../widgets/bottom_nav.dart';
+import '../widgets/app_modals.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/app_user.dart';
@@ -296,59 +297,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final pinCtrl = TextEditingController();
     bool isAdding = false;
 
-    await showDialog(
+    await AppModals.showAppDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
+      title: 'Add Cashier',
+      child: StatefulBuilder(
         builder: (context, setStateSB) {
-          return AlertDialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text('Add Cashier', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-            content: SingleChildScrollView(
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(labelText: 'Full Name'),
-                      validator: (v) => v!.isEmpty ? 'Required' : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: emailCtrl,
-                      decoration: const InputDecoration(labelText: 'Email Address'),
-                      validator: (v) => !v!.contains('@') ? 'Valid email required' : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: passCtrl,
-                      obscureText: true,
-                      decoration: const InputDecoration(labelText: 'Password (min 6 chars)'),
-                      validator: (v) => v!.length < 6 ? 'Min 6 chars' : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: pinCtrl,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      obscureText: true,
-                      decoration: const InputDecoration(labelText: '6-Digit App PIN'),
-                      validator: (v) => v!.length != 6 ? 'Must be 6 digits' : null,
-                    ),
-                  ],
+          return Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Full Name'),
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
-              ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: emailCtrl,
+                  decoration: const InputDecoration(labelText: 'Email Address'),
+                  validator: (v) => !v!.contains('@') ? 'Valid email required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: passCtrl,
+                  obscureText: true,
+                  decoration:
+                      const InputDecoration(labelText: 'Password (min 6 chars)'),
+                  validator: (v) => v!.length < 6 ? 'Min 6 chars' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: pinCtrl,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: '6-Digit App PIN'),
+                  validator: (v) => v!.length != 6 ? 'Must be 6 digits' : null,
+                ),
+                if (isAdding)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16),
+                    child: CircularProgressIndicator(),
+                  ),
+              ],
             ),
-            actions: [
-              OutlinedButton(
-                onPressed: isAdding ? null : () => Navigator.pop(ctx),
-                child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
-              ),
-              ElevatedButton(
-                onPressed: isAdding ? null : () async {
+          );
+        },
+      ),
+      primaryAction: StatefulBuilder(
+        builder: (context, setStateSB) => ElevatedButton(
+          onPressed: isAdding
+              ? null
+              : () async {
                   if (!formKey.currentState!.validate()) return;
                   setStateSB(() => isAdding = true);
                   try {
@@ -358,23 +359,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       password: passCtrl.text,
                       pin: pinCtrl.text,
                     );
-                    if (ctx.mounted) {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cashier added securely via Firebase Auth.')));
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content:
+                              Text('Cashier added securely via Firebase Auth.')));
                     }
                   } catch (e) {
                     setStateSB(() => isAdding = false);
-                    if (ctx.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(friendlyErrorMessage(e)),
+                          backgroundColor: AppTheme.error));
                     }
                   }
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
-                child: isAdding ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Add Cashier'),
-              ),
-            ],
-          );
-        }
+          child: isAdding
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
+              : const Text('Add Cashier'),
+        ),
+      ),
+      secondaryAction: TextButton(
+        onPressed: isAdding ? null : () => Navigator.pop(context),
+        child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
       ),
     );
   }
@@ -401,122 +412,165 @@ class _SettingsScreenState extends State<SettingsScreen> {
     
     if (!context.mounted) return;
     
-    await showDialog(
+    await AppModals.showAppDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
+      title: 'Profile Settings',
+      child: StatefulBuilder(
         builder: (context, setStateSB) {
-          return AlertDialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text('Profile Settings', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Personal Information', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textSecondary, letterSpacing: 1.2)),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: nameCtrl,
-                        decoration: InputDecoration(labelText: 'Full Name', prefixIcon: const Icon(LucideIcons.user, color: AppTheme.primaryColor), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                        validator: (v) => v!.isEmpty ? 'Required' : null,
-                      ),
-                      const SizedBox(height: 24),
-                      Text('Security', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textSecondary, letterSpacing: 1.2)),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: currentPinCtrl,
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
-                        obscureText: true,
-                        decoration: InputDecoration(labelText: 'Current PIN (required to change)', prefixIcon: const Icon(LucideIcons.lock, color: AppTheme.textSecondary), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), counterText: ''),
-                        validator: (v) {
-                          if (newPinCtrl.text.isNotEmpty) {
-                            if (v == null || v.isEmpty) return 'Required to set a new PIN';
-                            if (v.length != 6) return 'Must be 6 digits';
-                            if (!_auth.verifyPin(v)) return 'Incorrect current PIN';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: newPinCtrl,
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
-                        obscureText: true,
-                        decoration: InputDecoration(labelText: 'New 6-Digit PIN (optional)', prefixIcon: const Icon(LucideIcons.key, color: AppTheme.primaryColor), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), counterText: ''),
-                        validator: (v) {
-                          if (v != null && v.isNotEmpty && v.length != 6) return 'Must be 6 digits';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text('Biometric Login', style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
-                        value: biometricEnabled,
-                        onChanged: (val) async {
-                          try {
-                            final success = await _auth.toggleBiometrics(val);
-                            if (success && ctx.mounted) setStateSB(() => biometricEnabled = val);
-                          } catch (e) {
-                            if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
-                          }
-                        },
-                        activeColor: AppTheme.primaryColor,
-                      ),
-                      if (isAdmin) ...[
-                        const SizedBox(height: 24),
-                        Text('Shop Settings', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textSecondary, letterSpacing: 1.2)),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: shopNameCtrl,
-                          decoration: InputDecoration(labelText: 'Shop Name', prefixIcon: const Icon(LucideIcons.store, color: AppTheme.primaryColor), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                        ),
-                        const SizedBox(height: 20),
-                        _AdminCategoriesSection(shopId: user.shopId, firestoreService: _firestoreService),
-                      ],
-                    ],
-                  ),
+          return Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Personal Information',
+                    style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textSecondary,
+                        letterSpacing: 1.2)),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Full Name',
+                      prefixIcon:
+                          Icon(LucideIcons.user, color: AppTheme.primaryColor)),
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
-              ),
+                const SizedBox(height: 24),
+                Text('Security',
+                    style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textSecondary,
+                        letterSpacing: 1.2)),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: currentPinCtrl,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                      labelText: 'Current PIN (required to change)',
+                      prefixIcon:
+                          Icon(LucideIcons.lock, color: AppTheme.textSecondary),
+                      counterText: ''),
+                  validator: (v) {
+                    if (newPinCtrl.text.isNotEmpty) {
+                      if (v == null || v.isEmpty) return 'Required to set a new PIN';
+                      if (v.length != 6) return 'Must be 6 digits';
+                      if (!_auth.verifyPin(v)) return 'Incorrect current PIN';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: newPinCtrl,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                      labelText: 'New 6-Digit PIN (optional)',
+                      prefixIcon:
+                          Icon(LucideIcons.key, color: AppTheme.primaryColor),
+                      counterText: ''),
+                  validator: (v) {
+                    if (v != null && v.isNotEmpty && v.length != 6)
+                      return 'Must be 6 digits';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Biometric Login',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
+                  value: biometricEnabled,
+                  onChanged: (val) async {
+                    try {
+                      final success = await _auth.toggleBiometrics(val);
+                      if (success && context.mounted)
+                        setStateSB(() => biometricEnabled = val);
+                    } catch (e) {
+                      if (context.mounted)
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(friendlyErrorMessage(e)),
+                            backgroundColor: AppTheme.error));
+                    }
+                  },
+                  activeColor: AppTheme.primaryColor,
+                ),
+                if (isAdmin) ...[
+                  const SizedBox(height: 24),
+                  Text('Shop Settings',
+                      style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textSecondary,
+                          letterSpacing: 1.2)),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: shopNameCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Shop Name',
+                        prefixIcon:
+                            Icon(LucideIcons.store, color: AppTheme.primaryColor)),
+                  ),
+                  const SizedBox(height: 20),
+                  _AdminCategoriesSection(
+                      shopId: user.shopId, firestoreService: _firestoreService),
+                ],
+              ],
             ),
-            actions: [
-              OutlinedButton(
-                onPressed: isLoading ? null : () => Navigator.pop(ctx),
-                child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
-              ),
-              ElevatedButton(
-                onPressed: isLoading ? null : () async {
+          );
+        },
+      ),
+      primaryAction: StatefulBuilder(
+        builder: (context, setStateSB) => ElevatedButton(
+          onPressed: isLoading
+              ? null
+              : () async {
                   if (!formKey.currentState!.validate()) return;
                   setStateSB(() => isLoading = true);
                   try {
-                    await _auth.updateUserProfile(name: nameCtrl.text.trim(), pin: newPinCtrl.text.isNotEmpty ? newPinCtrl.text : null);
+                    await _auth.updateUserProfile(
+                        name: nameCtrl.text.trim(),
+                        pin:
+                            newPinCtrl.text.isNotEmpty ? newPinCtrl.text : null);
                     if (isAdmin && shopNameCtrl.text.isNotEmpty) {
-                      await _firestoreService.updateShopDetails(user.shopId, {'name': shopNameCtrl.text.trim()});
+                      await _firestoreService.updateShopDetails(
+                          user.shopId, {'name': shopNameCtrl.text.trim()});
                     }
-                    if (ctx.mounted) {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated!'), backgroundColor: Colors.green));
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('Profile updated!'),
+                          backgroundColor: Colors.green));
                       setState(() {});
                     }
                   } catch (e) {
                     setStateSB(() => isLoading = false);
-                    if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(friendlyErrorMessage(e)),
+                          backgroundColor: AppTheme.error));
+                    }
                   }
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white, minimumSize: const Size(0, 48)),
-                child: isLoading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Save'),
-              ),
-            ],
-          );
-        },
+          child: isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
+              : const Text('Save Changes'),
+        ),
+      ),
+      secondaryAction: TextButton(
+        onPressed: isLoading ? null : () => Navigator.pop(context),
+        child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
       ),
     );
   } 
@@ -541,10 +595,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _showPrinterSettingsDialog(BuildContext context) async {
-    showDialog(
+    AppModals.showAppDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(content: SizedBox(height: 100, child: Center(child: CircularProgressIndicator()))),
+      title: 'Searching Devices',
+      child: const SizedBox(
+        height: 100,
+        child: Center(
+            child: CircularProgressIndicator(color: AppTheme.primaryColor)),
+      ),
     );
     try {
       final allDevices = await bluetooth.getBondedDevices();
@@ -572,361 +630,148 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Socket? wifiSocket;
     int selectedTab = 0; // 0 = Bluetooth, 1 = WiFi
 
-    await showDialog(
+    await AppModals.showAppDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
+      title: 'Printer Settings',
+      child: StatefulBuilder(
         builder: (context, setStateSB) {
-          // ── Bluetooth content ──
-          Widget bluetoothContent() => Column(
+          return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (devices.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    children: [
-                      const Icon(LucideIcons.bluetoothOff, size: 20, color: AppTheme.error),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text('No paired Bluetooth printers found.\nPair a printer in device settings first.', style: GoogleFonts.inter(color: AppTheme.error, fontSize: 13))),
-                    ],
-                  ),
-                ),
-              if (devices.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      const Icon(LucideIcons.info, size: 14, color: AppTheme.textSecondary),
-                      const SizedBox(width: 6),
-                      Expanded(child: Text('Only thermal receipt printers are shown. If your printer is missing, make sure it is paired in device Bluetooth settings.', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textSecondary))),
-                    ],
-                  ),
-                ),
-                DropdownButtonFormField<BluetoothDevice>(
-                  value: selectedDevice,
-                  decoration: InputDecoration(
-                    labelText: 'Select Printer',
-                    prefixIcon: const Icon(LucideIcons.bluetooth, size: 18, color: AppTheme.info),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  isExpanded: true,
-                  items: devices.map((d) => DropdownMenuItem(value: d, child: Text(d.name ?? 'Unknown', overflow: TextOverflow.ellipsis, maxLines: 1))).toList(),
-                  onChanged: (val) {
-                    setStateSB(() => selectedDevice = val);
-                  },
-                ),
-              ],
-              const SizedBox(height: 16),
+              // Tab selector
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: isConnected ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: isConnected ? Colors.green.withOpacity(0.3) : AppTheme.error.withOpacity(0.3)),
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                padding: const EdgeInsets.all(4),
                 child: Row(
                   children: [
-                    Icon(isConnected ? LucideIcons.checkCircle2 : LucideIcons.xCircle, size: 18, color: isConnected ? Colors.green : AppTheme.error),
-                    const SizedBox(width: 8),
-                    Text(isConnected ? 'Connected' : 'Disconnected', style: GoogleFonts.inter(fontWeight: FontWeight.w500, color: isConnected ? Colors.green : AppTheme.error)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: Icon(isConnected ? LucideIcons.unplug : LucideIcons.plug, size: 16),
-                      onPressed: selectedDevice == null ? null : () async {
-                        if (isConnected) {
-                          await bluetooth.disconnect();
-                          setStateSB(() => isConnected = false);
-                          setState(() => isConnected = false);
-                        } else {
-                          try {
-                            await bluetooth.connect(selectedDevice!);
-                            setStateSB(() => isConnected = true);
-                            setState(() => isConnected = true);
-                          } catch (e) {
-                            if (ctx.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
-                            }
-                          }
-                        }
-                      },
-                      label: Text(isConnected ? 'Disconnect' : 'Connect'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      icon: const Icon(LucideIcons.printer, size: 16),
-                      onPressed: (!isConnected || selectedDevice == null) ? null : () async {
-                        try {
-                          await bluetooth.printCustom("Sleek POS", 3, 1);
-                          await bluetooth.printNewLine();
-                          await bluetooth.printCustom("Test Print Successful!", 1, 1);
-                          await bluetooth.printNewLine();
-                          await bluetooth.printNewLine();
-                          await bluetooth.paperCut();
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Test page sent to Bluetooth printer'), backgroundColor: Colors.green));
-                          }
-                        } catch (e) {
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
-                          }
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
-                      label: const Text('Test Print'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          );
-
-          // ── WiFi content ──
-          Widget wifiContent() => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  const Icon(LucideIcons.wifi, size: 18, color: AppTheme.info),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('Connect to a network/WiFi receipt printer using its IP address and port.', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary))),
-                ],
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: wifiIpCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Printer IP Address',
-                  hintText: 'e.g. 192.168.1.100',
-                  prefixIcon: const Icon(LucideIcons.globe, size: 18, color: AppTheme.info),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: wifiPortCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Port',
-                  hintText: '9100',
-                  prefixIcon: const Icon(LucideIcons.hash, size: 18, color: AppTheme.info),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: wifiConnected ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: wifiConnected ? Colors.green.withOpacity(0.3) : AppTheme.error.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    if (wifiConnecting)
-                      const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    else
-                      Icon(wifiConnected ? LucideIcons.checkCircle2 : LucideIcons.xCircle, size: 18, color: wifiConnected ? Colors.green : AppTheme.error),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(wifiStatus, style: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 13, color: wifiConnected ? Colors.green : (wifiConnecting ? AppTheme.textSecondary : AppTheme.error)))),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: Icon(wifiConnected ? LucideIcons.unplug : LucideIcons.plug, size: 16),
-                      onPressed: wifiConnecting ? null : () async {
-                        final ip = wifiIpCtrl.text.trim();
-                        final port = int.tryParse(wifiPortCtrl.text.trim()) ?? 9100;
-                        if (ip.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter the printer IP address'), backgroundColor: AppTheme.error));
-                          return;
-                        }
-                        if (wifiConnected) {
-                          // Disconnect
-                          try { wifiSocket?.destroy(); } catch (_) {}
-                          setStateSB(() { wifiConnected = false; wifiSocket = null; wifiStatus = 'Disconnected'; });
-                        } else {
-                          // Connect
-                          setStateSB(() { wifiConnecting = true; wifiStatus = 'Connecting to $ip:$port...'; });
-                          try {
-                            final socket = await Socket.connect(ip, port, timeout: const Duration(seconds: 5));
-                            wifiSocket = socket;
-                            setStateSB(() { wifiConnected = true; wifiConnecting = false; wifiStatus = 'Connected to $ip:$port'; });
-                          } catch (e) {
-                            setStateSB(() { wifiConnecting = false; wifiStatus = friendlyErrorMessage(e); });
-                          }
-                        }
-                      },
-                      label: Text(wifiConnected ? 'Disconnect' : 'Connect'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      icon: const Icon(LucideIcons.printer, size: 16),
-                      onPressed: !wifiConnected ? null : () async {
-                        try {
-                          final profile = await CapabilityProfile.load();
-                          final generator = Generator(PaperSize.mm80, profile);
-                          var bytes = <int>[];
-                          bytes += generator.reset();
-                          bytes += generator.text('Sleek POS', styles: const PosStyles(bold: true, align: PosAlign.center, height: PosTextSize.size2, width: PosTextSize.size2));
-                          bytes += generator.emptyLines(1);
-                          bytes += generator.text('WiFi Test Print Successful!', styles: const PosStyles(align: PosAlign.center));
-                          bytes += generator.emptyLines(2);
-                          bytes += generator.cut();
-                          wifiSocket?.add(Uint8List.fromList(bytes));
-                          await wifiSocket?.flush();
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Test page sent to WiFi printer'), backgroundColor: Colors.green));
-                          }
-                        } catch (e) {
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
-                          }
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
-                      label: const Text('Test Print'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          );
-
-          return AlertDialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Row(
-              children: [
-                const Icon(LucideIcons.printer, color: AppTheme.info),
-                const SizedBox(width: 8),
-                Text('Printer Settings', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-              ],
-            ),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Tab selector
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.background,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.all(4),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setStateSB(() => selectedTab = 0),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: selectedTab == 0 ? Colors.white : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(10),
-                                  boxShadow: selectedTab == 0 ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4)] : null,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(LucideIcons.bluetooth, size: 16, color: selectedTab == 0 ? AppTheme.info : AppTheme.textSecondary),
-                                    const SizedBox(width: 6),
-                                    Text('Bluetooth', style: GoogleFonts.inter(fontSize: 13, fontWeight: selectedTab == 0 ? FontWeight.w600 : FontWeight.normal, color: selectedTab == 0 ? AppTheme.textPrimary : AppTheme.textSecondary)),
-                                  ],
-                                ),
-                              ),
-                            ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setStateSB(() => selectedTab = 0),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: selectedTab == 0
+                                ? Colors.white
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: selectedTab == 0
+                                ? [
+                                    BoxShadow(
+                                        color: Colors.black.withOpacity(0.08),
+                                        blurRadius: 4)
+                                  ]
+                                : null,
                           ),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setStateSB(() => selectedTab = 1),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: selectedTab == 1 ? Colors.white : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(10),
-                                  boxShadow: selectedTab == 1 ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4)] : null,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(LucideIcons.wifi, size: 16, color: selectedTab == 1 ? AppTheme.info : AppTheme.textSecondary),
-                                    const SizedBox(width: 6),
-                                    Text('WiFi', style: GoogleFonts.inter(fontSize: 13, fontWeight: selectedTab == 1 ? FontWeight.w600 : FontWeight.normal, color: selectedTab == 1 ? AppTheme.textPrimary : AppTheme.textSecondary)),
-                                  ],
-                                ),
-                              ),
-                            ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(LucideIcons.bluetooth,
+                                  size: 16,
+                                  color: selectedTab == 0
+                                      ? AppTheme.info
+                                      : AppTheme.textSecondary),
+                              const SizedBox(width: 6),
+                              Text('Bluetooth',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: selectedTab == 0
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                      color: selectedTab == 0
+                                          ? AppTheme.textPrimary
+                                          : AppTheme.textSecondary)),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    // Tab content
-                    if (selectedTab == 0) bluetoothContent(),
-                    if (selectedTab == 1) wifiContent(),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setStateSB(() => selectedTab = 1),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: selectedTab == 1
+                                ? Colors.white
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: selectedTab == 1
+                                ? [
+                                    BoxShadow(
+                                        color: Colors.black.withOpacity(0.08),
+                                        blurRadius: 4)
+                                  ]
+                                : null,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(LucideIcons.wifi,
+                                  size: 16,
+                                  color: selectedTab == 1
+                                      ? AppTheme.info
+                                      : AppTheme.textSecondary),
+                              const SizedBox(width: 6),
+                              Text('WiFi',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: selectedTab == 1
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                      color: selectedTab == 1
+                                          ? AppTheme.textPrimary
+                                          : AppTheme.textSecondary)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-            ),
-            actions: [
-              OutlinedButton(
-                onPressed: () {
-                  // Clean up wifi socket on close if still connected
-                  if (wifiConnected && wifiSocket != null) {
-                    try { wifiSocket!.destroy(); } catch (_) {}
-                  }
-                  Navigator.pop(ctx);
-                },
-                child: Text('Close', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
-              ),
+              const SizedBox(height: 20),
+              // Tab content
+              if (selectedTab == 0) bluetoothContent(),
+              if (selectedTab == 1) wifiContent(),
             ],
           );
-        }
+        },
+      ),
+      primaryAction: ElevatedButton(
+        onPressed: () {
+          // Clean up wifi socket on close if still connected
+          if (wifiConnected && wifiSocket != null) {
+            try {
+              wifiSocket!.destroy();
+            } catch (_) {}
+          }
+          Navigator.pop(context);
+        },
+        child: const Text('Close'),
       ),
     );
   }
   Future<void> _showPrivacyPolicyDialog(BuildContext context) async {
-    await showDialog(
+    await AppModals.showAppDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Privacy Policy', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(
-          child: Text(
-            'We value your privacy. All Sleek POS data is stored securely in Firebase, '
-            'with role-based access controls to protect sensitive business information. '
-            'We do not sell your data to third parties. By using this application, you '
-            'agree to our standard formality terms and conditions regarding data handling '
-            'and offline sync backups.',
-            style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary, height: 1.5),
-          ),
-        ),
-        actions: [
-          OutlinedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Close', style: GoogleFonts.inter(color: AppTheme.primaryColor)),
-          ),
-        ],
+      title: 'Privacy Policy',
+      child: Text(
+        'We value your privacy. All Sleek POS data is stored securely in Firebase, '
+        'with role-based access controls to protect sensitive business information. '
+        'We do not sell your data to third parties. By using this application, you '
+        'agree to our standard formality terms and conditions regarding data handling '
+        'and offline sync backups.',
+        style: GoogleFonts.inter(
+            fontSize: 14, color: AppTheme.textSecondary, height: 1.5),
+      ),
+      primaryAction: ElevatedButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Close'),
       ),
     );
   }
@@ -935,68 +780,80 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final messageCtrl = TextEditingController();
     bool isLoading = false;
 
-    await showDialog(
+    await AppModals.showAppDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
+      title: 'Contact Support',
+      child: StatefulBuilder(
         builder: (context, setStateSB) {
-          return AlertDialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text('Contact Support', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Send us a message and we will get back to you as soon as possible.', style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary)),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: messageCtrl,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    hintText: 'Describe your issue...',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Send us a message and we will get back to you soon.',
+                  style: GoogleFonts.inter(
+                      fontSize: 14, color: AppTheme.textSecondary)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: messageCtrl,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  hintText: 'Describe your issue...',
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
-              ],
-            ),
-            actions: [
-              OutlinedButton(
-onPressed: isLoading ? null : () => Navigator.pop(ctx),
-child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
               ),
-              ElevatedButton(
-                onPressed: isLoading ? null : () async {
+            ],
+          );
+        },
+      ),
+      primaryAction: StatefulBuilder(
+        builder: (context, setStateSB) => ElevatedButton(
+          onPressed: isLoading
+              ? null
+              : () async {
                   if (messageCtrl.text.trim().isEmpty) return;
                   setStateSB(() => isLoading = true);
-                  
+
                   try {
                     String username = 'somapalagalagedara@gmail.com';
                     String password = 'gmsq cxug zkhv jtik';
-                    
+
                     final smtpServer = gmail(username, password);
                     final message = Message()
                       ..from = Address(username, 'Sleek POS App')
                       ..recipients.add('somapalagalagedara@gmail.com')
                       ..subject = 'Support Request: Sleek POS'
-                      ..text = 'Support Request from ${_auth.currentUser?.name} (Shop ID: ${_auth.currentUser?.shopId})\n\nMessage:\n${messageCtrl.text.trim()}';
+                      ..text =
+                          'Support Request from ${_auth.currentUser?.name} (Shop ID: ${_auth.currentUser?.shopId})\n\nMessage:\n${messageCtrl.text.trim()}';
 
                     await send(message, smtpServer);
-                    
-                    if (ctx.mounted) {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message sent successfully!'), backgroundColor: Colors.green));
+
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('Message sent successfully!'),
+                          backgroundColor: Colors.green));
                     }
                   } catch (e) {
                     setStateSB(() => isLoading = false);
-                    if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(friendlyErrorMessage(e)),
+                          backgroundColor: AppTheme.error));
+                    }
                   }
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
-                child: isLoading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Send'),
-              ),
-            ],
-          );
-        }
+          child: isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
+              : const Text('Send Message'),
+        ),
+      ),
+      secondaryAction: TextButton(
+        onPressed: isLoading ? null : () => Navigator.pop(context),
+        child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
       ),
     );
   }
@@ -1027,20 +884,21 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
     };
     BusinessConfig config = BusinessConfig.forType(BusinessType.retail);
 
-    await showDialog(
+    await AppModals.showAppDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
+      title: 'Notifications',
+      child: StatefulBuilder(
         builder: (context, setStateSB) {
-
           // Kick off the async load once
           if (!loadFired) {
             loadFired = true;
             Future.microtask(() async {
               try {
-                final loadedPrefs = await _firestoreService.getNotificationPreferences(shopId);
-                final loadedConfig = await _firestoreService.getBusinessConfig(shopId);
-                if (ctx.mounted) {
+                final loadedPrefs =
+                    await _firestoreService.getNotificationPreferences(shopId);
+                final loadedConfig =
+                    await _firestoreService.getBusinessConfig(shopId);
+                if (context.mounted) {
                   setStateSB(() {
                     prefs = loadedPrefs;
                     config = loadedConfig;
@@ -1048,29 +906,21 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
                   });
                 }
               } catch (_) {
-                if (ctx.mounted) setStateSB(() => dataReady = true);
+                if (context.mounted) setStateSB(() => dataReady = true);
               }
             });
           }
 
           if (!dataReady) {
-            return AlertDialog(
-              insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Text('Notifications', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-              content: const SizedBox(
-                width: double.maxFinite,
-                height: 120,
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              actions: [
-                OutlinedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
-                ),
-              ],
+            return const SizedBox(
+              height: 120,
+              child: Center(child: CircularProgressIndicator()),
             );
           }
+
+          // Generate UI children within the StatefulBuilder
+          final children = <Widget>[];
+
           // ── Helper to build a category header ──
           Widget sectionHeader(String title) => Padding(
                 padding: const EdgeInsets.only(top: 16, bottom: 4),
@@ -1094,7 +944,7 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Row(
                 children: [
-                  Icon(icon, size: 18, color: iconColor),
+                   Icon(icon, size: 18, color: iconColor),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -1119,17 +969,14 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
             );
           }
 
-          // ── Build toggle list ──
-          final children = <Widget>[
-            sectionHeader('GENERAL'),
-            toggle(
-              'dailySalesSummary',
-              'Daily Sales Summary',
-              'Recap of yesterday\'s revenue & orders',
-              LucideIcons.barChart2,
-              AppTheme.primaryColor,
-            ),
-          ];
+          children.add(sectionHeader('GENERAL'));
+          children.add(toggle(
+            'dailySalesSummary',
+            'Daily Sales Summary',
+            'Recap of yesterday\'s revenue & orders',
+            LucideIcons.barChart2,
+            AppTheme.primaryColor,
+          ));
 
           // Stock alerts (retail + pharmacy)
           if (config.hasStockManagement) {
@@ -1217,75 +1064,55 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
             ));
           }
 
-          return AlertDialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20)),
-            title: Text('Notifications',
-                style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: children,
-                ),
-              ),
-            ),
-            actions: [
-              OutlinedButton(
-                onPressed:
-                    isSaving ? null : () => Navigator.pop(ctx),
-                child: Text('Cancel',
-                    style: GoogleFonts.inter(color: AppTheme.textSecondary)),
-              ),
-              ElevatedButton(
-                onPressed: isSaving
-                    ? null
-                    : () async {
-                        setStateSB(() => isSaving = true);
-                        try {
-                          await _firestoreService
-                              .saveNotificationPreferences(shopId, prefs);
-                          if (ctx.mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content:
-                                    Text('Notification preferences saved!'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          setStateSB(() => isSaving = false);
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(friendlyErrorMessage(e)),
-                                backgroundColor: AppTheme.error,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(0, 48),
-                ),
-                child: isSaving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
-                    : const Text('Save'),
-              ),
-            ],
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: children,
           );
         },
+      ),
+      primaryAction: StatefulBuilder(
+        builder: (context, setStateSB) => ElevatedButton(
+          onPressed: isSaving
+              ? null
+              : () async {
+                  setStateSB(() => isSaving = true);
+                  try {
+                    await _firestoreService.saveNotificationPreferences(
+                        shopId, prefs);
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Notification preferences saved!'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    setStateSB(() => isSaving = false);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(friendlyErrorMessage(e)),
+                          backgroundColor: AppTheme.error,
+                        ),
+                      );
+                    }
+                  }
+                },
+          child: isSaving
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
+              : const Text('Save Changes'),
+        ),
+      ),
+      secondaryAction: TextButton(
+        onPressed: isSaving ? null : () => Navigator.pop(context),
+        child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
       ),
     );
   }
@@ -1299,81 +1126,88 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
     bool loading = true;
     List<AppUser> cashiers = [];
 
-    await showDialog(
+    await AppModals.showAppDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
+      title: 'Manage Cashiers',
+      child: StatefulBuilder(
         builder: (context, setStateSB) {
           // Load cashiers on first build
           if (loading) {
             _firestoreService.getShopUsers(user.shopId).then((users) {
-              if (ctx.mounted) {
+              if (context.mounted) {
                 setStateSB(() {
-                  cashiers = users.where((u) => u.role == UserRole.cashier).toList();
+                  cashiers =
+                      users.where((u) => u.role == UserRole.cashier).toList();
                   loading = false;
                 });
               }
             });
           }
 
-          return AlertDialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Row(
-              children: [
-                const Icon(LucideIcons.users, color: AppTheme.info),
-                const SizedBox(width: 8),
-                Text('Manage Cashiers', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18)),
-              ],
-            ),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: loading
-                  ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
-                  : cashiers.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(LucideIcons.userX, size: 48, color: AppTheme.textTertiary),
-                              const SizedBox(height: 12),
-                              Text('No cashiers found', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
-                            ],
-                          ),
-                        )
-                      : ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: cashiers.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (_, i) {
-                            final c = cashiers[i];
-                            return ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                              leading: Container(
-                                width: 44, height: 44,
-                                decoration: BoxDecoration(color: AppTheme.info.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                                child: const Icon(LucideIcons.userCircle, color: AppTheme.info),
-                              ),
-                              title: Text(c.name, style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
-                              subtitle: Text(c.email ?? '', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary)),
-                              trailing: TextButton.icon(
-                                icon: const Icon(LucideIcons.keyRound, size: 16),
-                                label: const Text('Reset PIN'),
-                                style: TextButton.styleFrom(foregroundColor: AppTheme.warning),
-                                onPressed: () => _showResetCashierPinDialog(ctx, c, setStateSB),
-                              ),
-                            );
-                          },
+          return SizedBox(
+            width: double.maxFinite,
+            child: loading
+                ? const Center(
+                    child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator()))
+                : cashiers.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(LucideIcons.userX,
+                                size: 48, color: AppTheme.textTertiary),
+                            const SizedBox(height: 12),
+                            Text('No cashiers found',
+                                style: GoogleFonts.inter(
+                                    color: AppTheme.textSecondary)),
+                          ],
                         ),
-            ),
-            actions: [
-              OutlinedButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text('Close', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
-              ),
-            ],
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: cashiers.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final c = cashiers[i];
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 4),
+                            leading: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                  color: AppTheme.info.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12)),
+                              child: const Icon(LucideIcons.userCircle,
+                                  color: AppTheme.info),
+                            ),
+                            title: Text(c.name,
+                                style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w500)),
+                            subtitle: Text(c.email ?? '',
+                                style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: AppTheme.textSecondary)),
+                            trailing: TextButton.icon(
+                              icon: const Icon(LucideIcons.keyRound, size: 16),
+                              label: const Text('Reset PIN'),
+                              style: TextButton.styleFrom(
+                                  foregroundColor: AppTheme.warning),
+                              onPressed: () => _showResetCashierPinDialog(
+                                  context, c, setStateSB),
+                            ),
+                          );
+                        },
+                      ),
           );
         },
+      ),
+      primaryAction: ElevatedButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Close'),
       ),
     );
   }
@@ -1382,79 +1216,138 @@ child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
     final pinCtrl = TextEditingController();
     bool resetting = false;
 
-    showDialog(
+    AppModals.showAppDialog(
       context: parentCtx,
-      builder: (ctx) => StatefulBuilder(
+      title: 'Reset PIN: ${cashier.name}',
+      child: StatefulBuilder(
         builder: (context, setStateSB) {
-          return AlertDialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text('Reset PIN for ${cashier.name}', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Set a new 6-digit PIN for this cashier. No previous PIN is required.',
-                  style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: pinCtrl,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'New 6-Digit PIN',
-                    prefixIcon: const Icon(LucideIcons.key, color: AppTheme.warning),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    counterText: '',
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              OutlinedButton(
-                onPressed: resetting ? null : () => Navigator.pop(ctx),
-                child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Set a new 6-digit PIN for this cashier. No previous PIN is required.',
+                style: GoogleFonts.inter(
+                    fontSize: 13, color: AppTheme.textSecondary),
               ),
-              ElevatedButton(
-                onPressed: resetting
-                    ? null
-                    : () async {
-                        if (pinCtrl.text.length != 6) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('PIN must be exactly 6 digits'), backgroundColor: AppTheme.error),
-                          );
-                          return;
-                        }
-                        setStateSB(() => resetting = true);
-                        try {
-                          await _auth.adminResetCashierPin(cashierUid: cashier.uid, newPin: pinCtrl.text);
-                          if (ctx.mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('PIN reset for ${cashier.name}!'), backgroundColor: Colors.green),
-                            );
-                          }
-                        } catch (e) {
-                          setStateSB(() => resetting = false);
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: AppTheme.error),
-                            );
-                          }
-                        }
-                      },
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warning, foregroundColor: Colors.white, minimumSize: const Size(0, 48)),
-                child: resetting
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Reset PIN'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: pinCtrl,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'New 6-Digit PIN',
+                  prefixIcon: Icon(LucideIcons.key, color: AppTheme.warning),
+                  counterText: '',
+                ),
               ),
             ],
           );
         },
       ),
+      primaryAction: StatefulBuilder(
+        builder: (context, setStateSB) => ElevatedButton(
+          onPressed: resetting
+              ? null
+              : () async {
+                  if (pinCtrl.text.length != 6) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('PIN must be exactly 6 digits'),
+                          backgroundColor: AppTheme.error),
+                    );
+                    return;
+                  }
+                  setStateSB(() => resetting = true);
+                  try {
+                    await _auth.adminResetCashierPin(
+                        cashierUid: cashier.uid, newPin: pinCtrl.text);
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text('PIN reset for ${cashier.name}!'),
+                            backgroundColor: Colors.green),
+                      );
+                    }
+                  } catch (e) {
+                    setStateSB(() => resetting = false);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text(friendlyErrorMessage(e)),
+                            backgroundColor: AppTheme.error),
+                      );
+                    }
+                  }
+                },
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warning),
+          child: resetting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
+              : const Text('Reset PIN'),
+        ),
+      ),
+      secondaryAction: TextButton(
+        onPressed: resetting ? null : () => Navigator.pop(parentCtx),
+        child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+      ),
+    );
+  }
+
+  Widget bluetoothContent() {
+    return Column(
+      children: [
+        if (devices.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Column(
+              children: [
+                Icon(LucideIcons.bluetooth, size: 48, color: AppTheme.textTertiary),
+                const SizedBox(height: 12),
+                Text('No bluetooth printers paired',
+                    style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+              ],
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            itemCount: devices.length,
+            itemBuilder: (context, i) {
+              final d = devices[i];
+              return ListTile(
+                title: Text(d.name ?? 'Unknown Device'),
+                subtitle: Text(d.address ?? ''),
+                trailing: isConnected && selectedDevice?.address == d.address
+                    ? const Icon(Icons.check_circle, color: Colors.green)
+                    : null,
+                onTap: () async {
+                  setState(() { selectedDevice = d; });
+                  await bluetooth.connect(d);
+                },
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget wifiContent() {
+    return Column(
+      children: [
+        TextField(
+          decoration: const InputDecoration(labelText: 'Printer IP Address'),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          decoration: const InputDecoration(labelText: 'Port (usually 9100)'),
+        ),
+      ],
     );
   }
 }
@@ -1551,9 +1444,3 @@ class _AdminCategoriesSectionState extends State<_AdminCategoriesSection> {
     );
   }
 }
-
-// Inline extension – kept at end of file
-// No extra file needed
-
-
-

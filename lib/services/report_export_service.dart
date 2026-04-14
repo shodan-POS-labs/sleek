@@ -470,7 +470,7 @@ class ReportExportService {
       topSheet.appendRow([
         IntCellValue(i + 1),
         TextCellValue(item.name),
-        IntCellValue(item.qty),
+        DoubleCellValue(item.qty),
         DoubleCellValue(item.revenue),
       ]);
     }
@@ -524,7 +524,7 @@ class ReportExportService {
         TextCellValue(item.saleId),
         TextCellValue(item.productName),
         DoubleCellValue(item.price),
-        IntCellValue(item.quantity),
+        DoubleCellValue(item.quantity),
         DoubleCellValue(item.discount),
         DoubleCellValue(item.total),
       ]);
@@ -659,7 +659,7 @@ class _DaySummary {
 
 class _ItemSummary {
   final String name;
-  int qty = 0;
+  double qty = 0;
   double revenue = 0;
   _ItemSummary({required this.name});
 }

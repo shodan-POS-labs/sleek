@@ -2,7 +2,7 @@ class CartItem {
   final int productId;
   final String name;
   final double price;
-  int quantity;
+  double quantity;
   final int stock;
 
   CartItem({

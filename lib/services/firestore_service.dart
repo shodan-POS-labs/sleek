@@ -6,6 +6,7 @@ import '../models/sale.dart';
 import '../models/business_config.dart';
 import '../models/app_notification.dart';
 import '../models/app_user.dart';
+import '../models/receipt_settings.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -59,6 +60,23 @@ class FirestoreService {
   CollectionReference<Map<String, dynamic>> _sales(String shopId) =>
       _db.collection('shops').doc(shopId).collection('sales');
 
+  Future<ReceiptSettings> getReceiptSettings(String shopId) async {
+    final doc = await _db.collection('shops').doc(shopId).get();
+    if (doc.exists && doc.data()?['receiptSettingsV2'] != null) {
+      return ReceiptSettings.fromMap(
+        Map<String, dynamic>.from(doc.data()!['receiptSettingsV2'] as Map),
+      );
+    }
+    // Fallback: build default settings from shop basic info
+    final data = doc.data() ?? {};
+    return ReceiptSettings(
+      businessName: data['name'] as String? ?? '',
+      address: data['address'] as String? ?? '',
+      phone: data['phone'] as String? ?? '',
+      email: data['email'] as String? ?? '',
+    );
+  }
+
   CollectionReference<Map<String, dynamic>> _categories(String shopId) =>
       _db.collection('shops').doc(shopId).collection('categories');
 
@@ -74,18 +92,52 @@ class FirestoreService {
   }
 
   Future<List<Product>> getProducts(String shopId, {String? search}) async {
-    final snapshot = await _products(shopId).orderBy('name').get();
-    var products = snapshot.docs.map((doc) {
-      final data = doc.data();
-      data['id'] = doc.id;
-      return Product.fromMap(data);
-    }).toList();
+    try {
+      Query<Map<String, dynamic>> query = _products(shopId).orderBy('name');
 
-    if (search != null && search.isNotEmpty) {
-      final s = search.toLowerCase();
-      products = products.where((p) => p.name.toLowerCase().contains(s) || p.barcode.contains(s)).toList();
+      if (search != null && search.isNotEmpty) {
+        // If it looks like a barcode (mostly digits), search by barcode exactly
+        if (RegExp(r'^\d+$').hasMatch(search)) {
+          final barcodeSnapshot = await _products(shopId)
+              .where('barcode', isEqualTo: search)
+              .get();
+          if (barcodeSnapshot.docs.isNotEmpty) {
+            return barcodeSnapshot.docs.map((doc) {
+              final data = doc.data();
+              data['id'] = doc.id;
+              return Product.fromMap(data);
+            }).toList();
+          }
+        }
+
+        // Fallback to name prefix search (case-sensitive by default in Firestore)
+        query = query
+            .where('name', isGreaterThanOrEqualTo: search)
+            .where('name', isLessThanOrEqualTo: search + '\uf8ff');
+      }
+
+      final snapshot = await query.limit(100).get();
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return Product.fromMap(data);
+      }).toList();
+    } catch (e) {
+      debugPrint("Error fetching products: $e");
+      // Return empty list so the UI doesn't hang in buffering state
+      return [];
     }
-    return products;
+  }
+
+  Future<Product?> getProductByBarcode(String shopId, String barcode) async {
+    final snapshot = await _products(shopId)
+        .where('barcode', isEqualTo: barcode)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isEmpty) return null;
+    final data = snapshot.docs.first.data();
+    data['id'] = snapshot.docs.first.id;
+    return Product.fromMap(data);
   }
 
   Future<Product?> getProductById(String shopId, String id) async {
@@ -107,7 +159,7 @@ class FirestoreService {
     await _products(shopId).doc(id).delete();
   }
 
-  Future<void> updateStock(String shopId, String productId, int quantityChange) async {
+  Future<void> updateStock(String shopId, String productId, num quantityChange) async {
     await _products(shopId).doc(productId).update({
       'stock': FieldValue.increment(quantityChange)
     });
@@ -141,18 +193,20 @@ class FirestoreService {
   }
 
   Future<List<Customer>> getCustomers(String shopId, {String? search}) async {
-    final snapshot = await _customers(shopId).orderBy('name').get();
-    var customers = snapshot.docs.map((doc) {
+    Query<Map<String, dynamic>> query = _customers(shopId).orderBy('name');
+
+    if (search != null && search.isNotEmpty) {
+      query = query
+          .where('name', isGreaterThanOrEqualTo: search)
+          .where('name', isLessThanOrEqualTo: search + '\uf8ff');
+    }
+
+    final snapshot = await query.limit(50).get();
+    return snapshot.docs.map((doc) {
       final data = doc.data();
       data['id'] = doc.id;
       return Customer.fromMap(data);
     }).toList();
-
-    if (search != null && search.isNotEmpty) {
-      final s = search.toLowerCase();
-      customers = customers.where((c) => c.name.toLowerCase().contains(s) || c.phone.contains(s)).toList();
-    }
-    return customers;
   }
 
   Future<void> updateCustomerBalance(String shopId, String customerId, double amount) async {
@@ -189,7 +243,8 @@ class FirestoreService {
 
     // Create Sale Doc
     final saleRef = _sales(shopId).doc();
-    final saleData = sale.toMap();
+    final pNames = items.map((e) => e.productName).toList();
+    final saleData = sale.copyWith(productNames: pNames).toMap();
     saleData.remove('id');
     batch.set(saleRef, saleData);
 
@@ -199,6 +254,7 @@ class FirestoreService {
       final itemData = item.toMap();
       itemData.remove('id');
       itemData['saleId'] = saleRef.id;
+      itemData['shopId'] = shopId; // Add shopId for collectionGroup queries
       batch.set(itemRef, itemData);
 
       // Deduct stock from scoped products subcollection
@@ -295,22 +351,19 @@ class FirestoreService {
     }).toList();
   }
 
-  /// Fetch all sale items for a list of sale IDs.
+  /// Fetch all sale items for a list of sale IDs in parallel for maximum speed.
   Future<List<SaleItem>> getSaleItemsForSales(String shopId, List<String> saleIds) async {
-    final List<SaleItem> allItems = [];
-    // Firestore 'in' queries limited to 30; batch accordingly
-    for (var i = 0; i < saleIds.length; i += 30) {
-      final batch = saleIds.sublist(i, i + 30 > saleIds.length ? saleIds.length : i + 30);
-      for (final saleId in batch) {
-        final snapshot = await _sales(shopId).doc(saleId).collection('items').get();
-        for (final doc in snapshot.docs) {
-          final data = doc.data();
-          data['id'] = doc.id;
-          allItems.add(SaleItem.fromMap(data));
-        }
-      }
-    }
-    return allItems;
+    final List<Future<List<SaleItem>>> futures = saleIds.map((saleId) async {
+      final snapshot = await _sales(shopId).doc(saleId).collection('items').get();
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return SaleItem.fromMap(data);
+      }).toList();
+    }).toList();
+
+    final nestedResults = await Future.wait(futures);
+    return nestedResults.expand((items) => items).toList();
   }
 
   /// Pharmacy: get products expiring within [days] from now.

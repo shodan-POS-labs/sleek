@@ -4,7 +4,7 @@ class Product {
   final String barcode;
   final double retailPrice;
   final double wholesalePrice;
-  final int stock;
+  final double stock;
   final String category;
   final String? imagePath;
   final double? profitPercentage;
@@ -25,6 +25,8 @@ class Product {
 
   // ── Retail fields ──
   final String unitType;       // "piece", "kg", "liter", "meter"
+  final bool isWeighable;
+  final double weightQuantity;
 
   Product({
     this.id,
@@ -32,7 +34,7 @@ class Product {
     this.barcode = '',
     required this.retailPrice,
     this.wholesalePrice = 0,
-    this.stock = 0,
+    this.stock = 0.0,
     required this.category,
     this.imagePath,
     this.profitPercentage,
@@ -43,6 +45,8 @@ class Product {
     this.serviceCharge = 0,
     this.deviceInfo,
     this.unitType = 'piece',
+    this.isWeighable = false,
+    this.weightQuantity = 1.0,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
@@ -66,6 +70,8 @@ class Product {
       'serviceCharge': serviceCharge,
       'deviceInfo': deviceInfo,
       'unitType': unitType,
+      'isWeighable': isWeighable,
+      'weightQuantity': weightQuantity,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -78,7 +84,7 @@ class Product {
       barcode: (map['barcode'] as String?) ?? '',
       retailPrice: (map['retailPrice'] as num).toDouble(),
       wholesalePrice: (map['wholesalePrice'] as num?)?.toDouble() ?? 0,
-      stock: (map['stock'] as int?) ?? 0,
+      stock: (map['stock'] as num?)?.toDouble() ?? 0.0,
       category: map['category'] as String,
       imagePath: map['imagePath'] as String?,
       profitPercentage: (map['profitPercentage'] as num?)?.toDouble(),
@@ -93,8 +99,10 @@ class Product {
       serviceCharge: (map['serviceCharge'] as num?)?.toDouble() ?? 0,
       deviceInfo: map['deviceInfo'] as String?,
       unitType: (map['unitType'] as String?) ?? 'piece',
-      createdAt: DateTime.parse(map['createdAt'] as String),
-      updatedAt: DateTime.parse(map['updatedAt'] as String),
+      isWeighable: (map['isWeighable'] as bool?) ?? false,
+      weightQuantity: (map['weightQuantity'] as num?)?.toDouble() ?? 1.0,
+      createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'] as String) : DateTime.now(),
+      updatedAt: map['updatedAt'] != null ? DateTime.parse(map['updatedAt'] as String) : DateTime.now(),
     );
   }
 
@@ -104,7 +112,7 @@ class Product {
     String? barcode,
     double? retailPrice,
     double? wholesalePrice,
-    int? stock,
+    double? stock,
     String? category,
     String? imagePath,
     double? profitPercentage,
@@ -115,6 +123,8 @@ class Product {
     double? serviceCharge,
     String? deviceInfo,
     String? unitType,
+    bool? isWeighable,
+    double? weightQuantity,
   }) {
     return Product(
       id: id ?? this.id,
@@ -133,6 +143,8 @@ class Product {
       serviceCharge: serviceCharge ?? this.serviceCharge,
       deviceInfo: deviceInfo ?? this.deviceInfo,
       unitType: unitType ?? this.unitType,
+      isWeighable: isWeighable ?? this.isWeighable,
+      weightQuantity: weightQuantity ?? this.weightQuantity,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );

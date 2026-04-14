@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../core/theme/app_theme.dart';
 import '../services/report_export_service.dart';
 import '../utils/error_helpers.dart';
+import '../widgets/app_modals.dart';
 
 /// Screen listing all previously generated report files with actions:
 /// rename, share, delete.
@@ -362,86 +363,56 @@ class _SavedReportsScreenState extends State<SavedReportsScreen> {
     final nameWithoutExt = oldName.substring(0, oldName.length - ext.length - 1);
     final controller = TextEditingController(text: nameWithoutExt);
 
-    showDialog(
+    AppModals.showAppDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Rename Report',
-            style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w600)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: GoogleFonts.inter(fontSize: 15),
-          decoration: InputDecoration(
-            suffixText: '.$ext',
-            suffixStyle: GoogleFonts.inter(
-                fontSize: 14, color: AppTheme.textSecondary),
-            filled: true,
-            fillColor: AppTheme.background,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppTheme.borderMedium),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppTheme.borderMedium),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2),
-            ),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          ),
+      title: 'Rename Report',
+      child: TextField(
+        controller: controller,
+        autofocus: true,
+        style: GoogleFonts.inter(fontSize: 15),
+        decoration: InputDecoration(
+          suffixText: '.$ext',
+          suffixStyle:
+              GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: TextButton.styleFrom(minimumSize: const Size(0, 44)),
-            child: Text('Cancel',
-                style: GoogleFonts.inter(color: AppTheme.textSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final newName = controller.text.trim();
-              if (newName.isEmpty) return;
-              Navigator.pop(ctx);
-              try {
-                await _exportService.renameFile(file, '$newName.$ext');
-                await _loadFiles();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Renamed to $newName.$ext'),
-                      backgroundColor: AppTheme.primaryColor,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(friendlyErrorMessage(e)),
-                      backgroundColor: AppTheme.error,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(0, 44),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text('Rename', style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
-          ),
-        ],
+      ),
+      primaryAction: ElevatedButton(
+        onPressed: () async {
+          final newName = controller.text.trim();
+          if (newName.isEmpty) return;
+          Navigator.pop(context);
+          try {
+            await _exportService.renameFile(file, '$newName.$ext');
+            await _loadFiles();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Renamed to $newName.$ext'),
+                  backgroundColor: AppTheme.primaryColor,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(friendlyErrorMessage(e)),
+                  backgroundColor: AppTheme.error,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+        },
+        child: const Text('Rename File'),
+      ),
+      secondaryAction: TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
       ),
     );
   }
@@ -449,62 +420,49 @@ class _SavedReportsScreenState extends State<SavedReportsScreen> {
   void _confirmDelete(File file) {
     final name = file.path.split(Platform.pathSeparator).last;
 
-    showDialog(
+    AppModals.showAppDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Delete Report',
-            style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w600)),
-        content: Text(
-          'Are you sure you want to delete\n"$name"?\n\nThis cannot be undone.',
-          style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: TextButton.styleFrom(minimumSize: const Size(0, 44)),
-            child: Text('Cancel',
-                style: GoogleFonts.inter(color: AppTheme.textSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              try {
-                await _exportService.deleteFile(file);
-                await _loadFiles();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text('Report deleted'),
-                      backgroundColor: AppTheme.primaryColor,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(friendlyErrorMessage(e)),
-                      backgroundColor: AppTheme.error,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.error,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(0, 44),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text('Delete', style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
-          ),
-        ],
+      title: 'Delete Report',
+      child: Text(
+        'Are you sure you want to delete\n"$name"?\n\nThis cannot be undone.',
+        style: GoogleFonts.inter(
+            fontSize: 14, color: AppTheme.textSecondary, height: 1.5),
+      ),
+      primaryAction: ElevatedButton(
+        onPressed: () async {
+          Navigator.pop(context);
+          try {
+            await _exportService.deleteFile(file);
+            await _loadFiles();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Report deleted'),
+                  backgroundColor: AppTheme.primaryColor,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(friendlyErrorMessage(e)),
+                  backgroundColor: AppTheme.error,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+        },
+        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+        child: const Text('Delete Permanently'),
+      ),
+      secondaryAction: TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
       ),
     );
   }
